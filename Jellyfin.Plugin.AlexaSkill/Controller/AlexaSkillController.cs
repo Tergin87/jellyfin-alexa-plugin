@@ -15,6 +15,7 @@ using Jellyfin.Plugin.AlexaSkill.Alexa;
 using Jellyfin.Plugin.AlexaSkill.Alexa.Handler;
 using Jellyfin.Plugin.AlexaSkill.Alexa.Locale;
 using Jellyfin.Plugin.AlexaSkill.Alexa.Pipeline;
+using Jellyfin.Plugin.AlexaSkill.Alexa.Playback;
 using Jellyfin.Plugin.AlexaSkill.Alexa.Util;
 using Jellyfin.Plugin.AlexaSkill.Alexa.Diagnostics;
 using Jellyfin.Plugin.AlexaSkill.Controller.Handler;
@@ -330,6 +331,16 @@ public class AlexaSkillController : ControllerBase
             }
 
             string requestId = req.Request?.RequestId ?? Guid.NewGuid().ToString("N")[..8];
+
+            // Split-endpoint speakers (Sonos Era 100): re-key the request to the device the
+            // playing stream was issued for, so its events reach that device's queue.
+            string? reportedDeviceId = req.Context.System.Device?.DeviceID;
+            string? ownerDeviceId = PlaybackDeviceAliases.Shared.ResolveOwner(reportedDeviceId, PlaybackDeviceAliases.GetPlayingToken(req));
+            if (ownerDeviceId != null)
+            {
+                req.Context.System.Device!.DeviceID = ownerDeviceId;
+            }
+
             string deviceId = req.Context.System.Device?.DeviceID ?? "unknown";
             string requestType = req.Request?.Type ?? "unknown";
 
@@ -346,6 +357,13 @@ public class AlexaSkillController : ControllerBase
             {
                 _logger.LogInformation("Processing Alexa request of type: {RequestType}", requestType);
                 _logger.LogDebug("Request body: {RequestBody}", RequestLogRedactor.Redact(body));
+
+                if (ownerDeviceId != null)
+                {
+                    _logger.LogInformation(
+                        "Device alias: request from device {ReportedDeviceId} re-keyed to device {OwnerDeviceId}, which the playing stream was issued for",
+                        reportedDeviceId, ownerDeviceId);
+                }
 
                 Entities.User? user = Plugin.Instance!.Configuration.GetUserById(userId);
 
@@ -421,6 +439,7 @@ public class AlexaSkillController : ControllerBase
                 }
 
                 SkillResponse skillResponse = await _pipeline.ExecuteAsync(selectedHandler, req.Request, req.Context, req.Session, cts.Token).ConfigureAwait(false);
+                PlaybackDeviceAliases.Shared.RecordIssuedTokens(req.Context.System.Device?.DeviceID, skillResponse);
                 return SkillResponseContent(skillResponse);
             }
         }
