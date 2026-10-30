@@ -189,7 +189,7 @@ public class PlaybackNearlyFinishedEventHandler : BaseHandler
                     SkillResponse cachedResponse = Launch.BuildAudioPlayerResponse(PlayBehavior.Enqueue, cachedUrl, cachedNextId.ToString(), cachedItem, user, context, ratePerMille: cachedRatePerMille, queueManager: _queueManager);
 
                     UpdateRecoveryPointer(deviceId, cachedNextId.ToString(), context, cachedItem.Name);
-                    return cachedResponse;
+                    return WithoutSessionFlag(cachedResponse);
                 }
 
                 Logger.LogInformation(
@@ -349,7 +349,22 @@ public class PlaybackNearlyFinishedEventHandler : BaseHandler
 
         CommitPendingContinuation(pending, session, deviceId);
         UpdateRecoveryPointer(deviceId, itemId, context, itemNameForLog: null);
-        return enqueueResponse;
+        return WithoutSessionFlag(enqueueResponse);
+    }
+
+    /// <summary>
+    /// The enqueue answers an AudioPlayer event, outside any voice session, so it omits
+    /// shouldEndSession (the keep-alive shape) instead of the builder's play-time true.
+    /// Live case (Sonos Era 100, 2026-10-31): the speaker accepted the ENQUEUE carrying
+    /// shouldEndSession=true without error but never played it; a self-hosted skill whose
+    /// identical ENQUEUE omitted the field chained tracks on the same speaker.
+    /// </summary>
+    /// <param name="response">The enqueue response built by the launch builder.</param>
+    /// <returns>The same response with shouldEndSession omitted.</returns>
+    private static SkillResponse WithoutSessionFlag(SkillResponse response)
+    {
+        response.Response.ShouldEndSession = null;
+        return response;
     }
 
     /// <summary>

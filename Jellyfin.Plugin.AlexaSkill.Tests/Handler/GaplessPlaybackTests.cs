@@ -160,6 +160,9 @@ public class GaplessPlaybackTests : PluginTestBase, IDisposable
         Assert.Equal(PlayBehavior.Enqueue, directive.PlayBehavior);
         Assert.Equal(track2Id.ToString(), directive.AudioItem.Stream.Token);
         Assert.Equal(track1Id.ToString(), directive.AudioItem.Stream.ExpectedPreviousToken);
+
+        // Sonos Era 100: an event-time enqueue carrying shouldEndSession=true is never played
+        Assert.Null(response.Response.ShouldEndSession);
     }
 
     [Fact]
