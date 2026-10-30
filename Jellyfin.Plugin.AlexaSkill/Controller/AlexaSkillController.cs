@@ -439,7 +439,7 @@ public class AlexaSkillController : ControllerBase
                 }
 
                 SkillResponse skillResponse = await _pipeline.ExecuteAsync(selectedHandler, req.Request, req.Context, req.Session, cts.Token).ConfigureAwait(false);
-                PlaybackDeviceAliases.Shared.RecordIssuedTokens(req.Context.System.Device?.DeviceID, skillResponse);
+                PlaybackDeviceAliases.Shared.RecordIssuedTokens(req.Context.System?.Device?.DeviceID, skillResponse);
                 return SkillResponseContent(skillResponse);
             }
         }
