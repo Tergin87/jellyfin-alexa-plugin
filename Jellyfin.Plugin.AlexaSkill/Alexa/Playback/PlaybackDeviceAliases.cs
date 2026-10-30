@@ -136,6 +136,23 @@ public sealed class PlaybackDeviceAliases
         return owner;
     }
 
+    /// <summary>
+    /// The devices a token is currently recorded as issued for, for diagnostic logging.
+    /// </summary>
+    /// <param name="playingToken">The stream token.</param>
+    /// <returns>The issuing device ids within the retention window; empty when unknown.</returns>
+    public string[] IssuersOf(string? playingToken)
+    {
+        if (string.IsNullOrEmpty(playingToken)
+            || !_issued.TryGetValue(playingToken, out ConcurrentDictionary<string, DateTimeOffset>? issuers))
+        {
+            return Array.Empty<string>();
+        }
+
+        DateTimeOffset cutoff = _clock() - Retention;
+        return issuers.Where(issue => issue.Value >= cutoff).Select(issue => issue.Key).ToArray();
+    }
+
     private void Prune(DateTimeOffset now)
     {
         DateTimeOffset cutoff = now - Retention;

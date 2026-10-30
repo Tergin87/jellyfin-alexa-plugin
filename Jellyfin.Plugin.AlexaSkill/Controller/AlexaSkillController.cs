@@ -335,7 +335,8 @@ public class AlexaSkillController : ControllerBase
             // Split-endpoint speakers (Sonos Era 100): re-key the request to the device the
             // playing stream was issued for, so its events reach that device's queue.
             string? reportedDeviceId = req.Context.System.Device?.DeviceID;
-            string? ownerDeviceId = PlaybackDeviceAliases.Shared.ResolveOwner(reportedDeviceId, PlaybackDeviceAliases.GetPlayingToken(req));
+            string? playingToken = PlaybackDeviceAliases.GetPlayingToken(req);
+            string? ownerDeviceId = PlaybackDeviceAliases.Shared.ResolveOwner(reportedDeviceId, playingToken);
             if (ownerDeviceId != null)
             {
                 req.Context.System.Device!.DeviceID = ownerDeviceId;
@@ -363,6 +364,12 @@ public class AlexaSkillController : ControllerBase
                     _logger.LogInformation(
                         "Device alias: request from device {ReportedDeviceId} re-keyed to device {OwnerDeviceId}, which the playing stream was issued for",
                         reportedDeviceId, ownerDeviceId);
+                }
+                else if (req.Request is AudioPlayerRequest)
+                {
+                    _logger.LogInformation(
+                        "Device alias: no re-key for device {ReportedDeviceId}, token {Token} issued for [{Issuers}]",
+                        reportedDeviceId, playingToken, string.Join(", ", PlaybackDeviceAliases.Shared.IssuersOf(playingToken)));
                 }
 
                 Entities.User? user = Plugin.Instance!.Configuration.GetUserById(userId);

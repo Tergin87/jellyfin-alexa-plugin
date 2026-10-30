@@ -159,6 +159,20 @@ public class PlaybackDeviceAliasesTests
     }
 
     [Fact]
+    public void IssuersOf_ListsLiveIssuers_EmptyWhenUnknown()
+    {
+        var aliases = NewAliases();
+        string token = Guid.NewGuid().ToString();
+        aliases.RecordIssued(OtherDevice, token);
+        _now = _now + PlaybackDeviceAliases.Retention + TimeSpan.FromMinutes(1);
+        aliases.RecordIssued(VoiceDevice, token);
+
+        Assert.Equal(new[] { VoiceDevice }, aliases.IssuersOf(token));
+        Assert.Empty(aliases.IssuersOf(Guid.NewGuid().ToString()));
+        Assert.Empty(aliases.IssuersOf(null));
+    }
+
+    [Fact]
     public void GetPlayingToken_PrefersTheEventToken()
     {
         var request = new SkillRequest
