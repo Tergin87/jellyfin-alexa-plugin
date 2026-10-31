@@ -18,6 +18,7 @@ using Jellyfin.Plugin.AlexaSkill.Alexa.Pipeline;
 using Jellyfin.Plugin.AlexaSkill.Alexa.Playback;
 using Jellyfin.Plugin.AlexaSkill.Alexa.Util;
 using Jellyfin.Plugin.AlexaSkill.Alexa.Diagnostics;
+using Jellyfin.Plugin.AlexaSkill.Configuration;
 using Jellyfin.Plugin.AlexaSkill.Controller.Handler;
 using Jellyfin.Plugin.AlexaSkill.Diagnostics;
 using Jellyfin.Plugin.AlexaSkill.Entities;
@@ -50,6 +51,9 @@ public class AlexaSkillController : ControllerBase
     private readonly RequestCounters _counters;
     private readonly RequestPipeline _pipeline;
     private readonly IEnumerable<BaseHandler> _handlers;
+    private readonly SonosQueueCaster? _sonosCaster;
+    private readonly ILibraryManager? _libraryManager;
+    private readonly DeviceQueueManager? _queueManager;
 
     private readonly CsrfTokenHandler _csrfTokenHandler;
 
@@ -62,13 +66,19 @@ public class AlexaSkillController : ControllerBase
     /// <param name="counters">Request counters for metrics.</param>
     /// <param name="pipeline">The request pipeline for interceptor-based request processing.</param>
     /// <param name="handlers">The registered intent/event handlers.</param>
+    /// <param name="sonosCaster">The Sonos native-queue caster (proof of concept); null in tests.</param>
+    /// <param name="libraryManager">The library manager, used to describe cast tracks; null in tests.</param>
+    /// <param name="queueManager">The device queue manager, the play order of a cast; null in tests.</param>
     public AlexaSkillController(
         IUserManager userManager,
         ISessionManager sessionManager,
         ILoggerFactory loggerFactory,
         RequestCounters counters,
         RequestPipeline pipeline,
-        IEnumerable<BaseHandler> handlers)
+        IEnumerable<BaseHandler> handlers,
+        SonosQueueCaster? sonosCaster = null,
+        ILibraryManager? libraryManager = null,
+        DeviceQueueManager? queueManager = null)
     {
         _userManager = userManager;
         _sessionManager = sessionManager;
@@ -76,6 +86,9 @@ public class AlexaSkillController : ControllerBase
         _counters = counters;
         _pipeline = pipeline;
         _handlers = handlers;
+        _sonosCaster = sonosCaster;
+        _libraryManager = libraryManager;
+        _queueManager = queueManager;
 
         _csrfTokenHandler = Plugin.Instance!.CsrfTokenHandler;
     }
@@ -464,6 +477,17 @@ public class AlexaSkillController : ControllerBase
 
                 SkillResponse skillResponse = await _pipeline.ExecuteAsync(selectedHandler, req.Request, req.Context, req.Session, cts.Token).ConfigureAwait(false);
                 string? responseDeviceId = req.Context.System?.Device?.DeviceID;
+
+                // Sonos native-queue cast (proof of concept): a fresh launch for the configured
+                // Sonos speaker fills the speaker's own queue over the LAN and answers with a
+                // spoken confirmation instead of AudioPlayer.Play. On any failure the original
+                // AudioPlayer response goes out unchanged (the first track still plays).
+                if (SonosCastRouting.ShouldCast(Plugin.Instance!.Configuration, responseDeviceId)
+                    && await TryCastToSonosAsync(skillResponse, req.Request, responseDeviceId!, user, cts.Token).ConfigureAwait(false))
+                {
+                    return SkillResponseContent(skillResponse);
+                }
+
                 PlaybackDeviceAliases.Shared.RecordIssuedTokens(responseDeviceId, skillResponse);
                 if (SplitEndpointCompatibility.IsKnown(Plugin.Instance!.Configuration.SplitEndpointDeviceIds, responseDeviceId)
                     && SplitEndpointCompatibility.Apply(skillResponse, user.Id, rawPlayingToken))
@@ -500,6 +524,80 @@ public class AlexaSkillController : ControllerBase
             Content = json,
             ContentType = "application/json"
         };
+    }
+
+    /// <summary>
+    /// Sonos native-queue cast (proof of concept): when the handler's response is a fresh
+    /// AudioPlayer launch, pushes the device queue (launch item first) into the configured
+    /// Sonos speaker's own queue and rewrites the response into a spoken confirmation.
+    /// </summary>
+    /// <param name="skillResponse">The handler's response (rewritten on success).</param>
+    /// <param name="request">The Alexa request (for the locale).</param>
+    /// <param name="deviceId">The request's device id (the queue key).</param>
+    /// <param name="user">The resolved plugin user (stream URLs carry its token).</param>
+    /// <param name="cancellationToken">The request budget.</param>
+    /// <returns>True when the speaker took the queue and the response was rewritten.</returns>
+    private async Task<bool> TryCastToSonosAsync(SkillResponse skillResponse, Request request, string deviceId, Entities.User user, CancellationToken cancellationToken)
+    {
+        if (_sonosCaster == null || _libraryManager == null)
+        {
+            return false;
+        }
+
+        var launch = SonosCastRouting.FindLaunch(skillResponse);
+        if (launch == null || !StreamTokenCodec.TryGetItemId(launch.AudioItem.Stream.Token, out Guid launchItemId))
+        {
+            return false;
+        }
+
+        PluginConfiguration config = Plugin.Instance!.Configuration;
+        if (string.IsNullOrWhiteSpace(config.ServerAddress) || string.IsNullOrWhiteSpace(user.JellyfinToken))
+        {
+            return false;
+        }
+
+        var serverRoot = new Uri(config.ServerAddress);
+        var tracks = new List<SonosTrack>();
+        string? albumName = null;
+        foreach (string id in SonosCastRouting.PlayOrder(_queueManager?.GetQueue(deviceId), launchItemId.ToString()))
+        {
+            if (!Guid.TryParse(id, out Guid itemGuid) || _libraryManager.GetItemById(itemGuid) is not MediaBrowser.Controller.Entities.BaseItem item)
+            {
+                continue;
+            }
+
+            string? artist = null;
+            if (item is MediaBrowser.Controller.Entities.Audio.Audio audio)
+            {
+                artist = audio.AlbumArtists.FirstOrDefault() ?? audio.Artists.FirstOrDefault();
+                albumName ??= audio.Album;
+            }
+
+            string itemN = itemGuid.ToString("N");
+            tracks.Add(new SonosTrack(
+                Url: new Uri(serverRoot, $"Audio/{itemN}/stream?static=true&api_key={user.JellyfinToken}").ToString(),
+                Title: item.Name,
+                Artist: artist,
+                Album: item is MediaBrowser.Controller.Entities.Audio.Audio a ? a.Album : null,
+                ArtUrl: item.HasImage(MediaBrowser.Model.Entities.ImageType.Primary, 0) ? new Uri(serverRoot, $"Items/{itemN}/Images/Primary?api_key={user.JellyfinToken}").ToString() : null,
+                MimeType: SonosQueueCaster.MimeTypeForContainer(item.Container)));
+        }
+
+        if (tracks.Count == 0)
+        {
+            _logger.LogWarning("Sonos cast: no library item behind launch token {Token}; AudioPlayer response kept", launch.AudioItem.Stream.Token);
+            return false;
+        }
+
+        _logger.LogInformation("Sonos cast: {Count} track(s) for device {DeviceId} -> {Host}", tracks.Count, deviceId, config.SonosCastHost);
+        if (!await _sonosCaster.CastAsync(config.SonosCastHost, tracks, cancellationToken).ConfigureAwait(false))
+        {
+            return false;
+        }
+
+        string spoken = tracks.Count > 1 && !string.IsNullOrWhiteSpace(albumName) ? albumName : tracks[0].Title;
+        SonosCastRouting.ToCastConfirmation(skillResponse, ResponseStrings.Get("SonosCastStarted", BaseHandler.GetLocalePublic(request), spoken));
+        return true;
     }
 
     /// <summary>

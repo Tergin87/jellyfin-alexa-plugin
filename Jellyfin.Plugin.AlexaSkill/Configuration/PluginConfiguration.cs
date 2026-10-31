@@ -438,6 +438,23 @@ public class PluginConfiguration : BasePluginConfiguration
 #pragma warning restore CA2227
 
     /// <summary>
+    /// Gets or sets the LAN host (IP address or name) of the Sonos speaker whose native
+    /// queue receives the music instead of the Alexa AudioPlayer. Empty (default) disables
+    /// the cast: playback stays on the AudioPlayer. Proof of concept for the Sonos Era 100,
+    /// where the AudioPlayer ENQUEUE is accepted but never played (albums stop after the
+    /// first track), while the speaker's own queue chains tracks natively and Alexa on the
+    /// speaker already controls that queue by voice (pause, next, previous).
+    /// </summary>
+    public string SonosCastHost { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets extra Alexa device ids (comma separated) whose play requests are cast
+    /// to <see cref="SonosCastHost"/>. The learned <see cref="SplitEndpointDeviceIds"/> are
+    /// always cast when a host is set; this list covers a speaker that was never learned.
+    /// </summary>
+    public string SonosCastDeviceIds { get; set; } = string.Empty;
+
+    /// <summary>
     /// Finds the library binding for an Alexa device id, or null when the device is
     /// not bound. Case-insensitive device id compare (the config UI round-trips the
     /// exact id, but hand-edited config files have drifted case before).

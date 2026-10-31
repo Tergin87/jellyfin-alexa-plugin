@@ -572,6 +572,12 @@ public class ConfigurationController : ControllerBase
         if (req.TryGetValue("CatalogSyncLocales", out var catalogSyncToken) && catalogSyncToken.Type == JTokenType.String)
         { config.CatalogSyncLocales = catalogSyncToken.Value<string>() ?? string.Empty; updated = true; }
 
+        if (req.TryGetValue("SonosCastHost", out var sonosHostToken) && sonosHostToken.Type == JTokenType.String)
+        { config.SonosCastHost = (sonosHostToken.Value<string>() ?? string.Empty).Trim(); updated = true; }
+
+        if (req.TryGetValue("SonosCastDeviceIds", out var sonosDevicesToken) && sonosDevicesToken.Type == JTokenType.String)
+        { config.SonosCastDeviceIds = (sonosDevicesToken.Value<string>() ?? string.Empty).Trim(); updated = true; }
+
         if (req.TryGetValue("AsrCompoundWordFixEnabled", out var asrToken) && asrToken.Type == JTokenType.Boolean)
         { config.AsrCompoundWordFixEnabled = asrToken.Value<bool>(); updated = true; }
 
