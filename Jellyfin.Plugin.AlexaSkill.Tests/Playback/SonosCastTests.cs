@@ -117,6 +117,42 @@ public class SonosCastTests
         Assert.Contains("<desc id=\"cdudn\" nameSpace=\"urn:schemas-rinconnetworks-com:metadata-1-0/\">RINCON_AssociatedZPUDN</desc>", didl, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("0:01:23", 83L * TimeSpan.TicksPerSecond)]
+    [InlineData("1:02:03.500", (3723L * TimeSpan.TicksPerSecond) + (TimeSpan.TicksPerSecond / 2))]
+    [InlineData("NOT_IMPLEMENTED", 0L)]
+    [InlineData(null, 0L)]
+    public void ParseHmsToTicks_ReadsSonosTimes(string? hms, long expected)
+    {
+        Assert.Equal(expected, SonosQueueCaster.ParseHmsToTicks(hms));
+    }
+
+    [Fact]
+    public void TryParseJellyfinAudioItem_RecognisesOurStreamUrls()
+    {
+        Assert.True(SonosQueueCaster.TryParseJellyfinAudioItem("https://jf/Audio/106c34c96c839e9a25eda3e45af1cfca/stream?static=true&api_key=k", out Guid id));
+        Assert.Equal(Guid.Parse("106c34c9-6c83-9e9a-25ed-a3e45af1cfca"), id);
+        Assert.False(SonosQueueCaster.TryParseJellyfinAudioItem("x-sonos-spotify:spotify%3atrack%3a123", out _));
+        Assert.False(SonosQueueCaster.TryParseJellyfinAudioItem(null, out _));
+    }
+
+    [Fact]
+    public void ParsePlaybackState_ReadsTransportAndPosition()
+    {
+        const string transport = "<s:Envelope><s:Body><u:GetTransportInfoResponse><CurrentTransportState>PAUSED_PLAYBACK</CurrentTransportState><CurrentTransportStatus>OK</CurrentTransportStatus></u:GetTransportInfoResponse></s:Body></s:Envelope>";
+        const string position = "<s:Envelope><s:Body><u:GetPositionInfoResponse><Track>3</Track><TrackDuration>0:04:10</TrackDuration><TrackURI>https://jf/Audio/106c34c96c839e9a25eda3e45af1cfca/stream?static=true&amp;api_key=k</TrackURI><RelTime>0:01:05</RelTime></u:GetPositionInfoResponse></s:Body></s:Envelope>";
+
+        SonosPlaybackState state = SonosQueueCaster.ParsePlaybackState(transport, position);
+
+        Assert.Equal("PAUSED_PLAYBACK", state.TransportState);
+        Assert.True(state.IsPaused);
+        Assert.True(state.IsActive);
+        Assert.Equal(3, state.TrackNumber);
+        Assert.Equal("https://jf/Audio/106c34c96c839e9a25eda3e45af1cfca/stream?static=true&api_key=k", state.TrackUri);
+        Assert.Equal(65L * TimeSpan.TicksPerSecond, state.PositionTicks);
+        Assert.Equal(250L * TimeSpan.TicksPerSecond, state.DurationTicks);
+    }
+
     [Fact]
     public void BuildSoapEnvelope_WrapsActionAndEscapesArguments()
     {

@@ -274,7 +274,108 @@ public sealed class SonosQueueCaster
         return udn;
     }
 
-    private async Task InvokeAsync(string host, string action, IReadOnlyList<KeyValuePair<string, string>> arguments, CancellationToken cancellationToken)
+    /// <summary>
+    /// Reads what the speaker is doing right now: transport state, current track URI and
+    /// position (AVTransport <c>GetTransportInfo</c> + <c>GetPositionInfo</c>).
+    /// </summary>
+    /// <param name="host">The speaker's LAN host.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The state, or null when the speaker did not answer (logged at debug).</returns>
+    public async Task<SonosPlaybackState?> GetPlaybackStateAsync(string host, CancellationToken cancellationToken)
+    {
+        try
+        {
+            string transport = await InvokeAsync(host, "GetTransportInfo", new[] { Arg("InstanceID", "0") }, cancellationToken).ConfigureAwait(false);
+            string position = await InvokeAsync(host, "GetPositionInfo", new[] { Arg("InstanceID", "0") }, cancellationToken).ConfigureAwait(false);
+            return ParsePlaybackState(transport, position);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or HttpRequestException or InvalidOperationException)
+        {
+            _logger.LogDebug(ex, "Sonos cast: could not read the playback state of {Host}", host);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Builds the playback state from the two AVTransport answers.
+    /// </summary>
+    /// <param name="transportInfoBody">The <c>GetTransportInfo</c> SOAP response body.</param>
+    /// <param name="positionInfoBody">The <c>GetPositionInfo</c> SOAP response body.</param>
+    /// <returns>The parsed state.</returns>
+    internal static SonosPlaybackState ParsePlaybackState(string transportInfoBody, string positionInfoBody)
+    {
+        string state = ParseSoapValue(transportInfoBody, "CurrentTransportState") ?? "UNKNOWN";
+        string? trackUri = ParseSoapValue(positionInfoBody, "TrackURI");
+        int.TryParse(ParseSoapValue(positionInfoBody, "Track"), NumberStyles.Integer, CultureInfo.InvariantCulture, out int track);
+        return new SonosPlaybackState(
+            state,
+            string.IsNullOrWhiteSpace(trackUri) ? null : System.Net.WebUtility.HtmlDecode(trackUri),
+            track,
+            ParseHmsToTicks(ParseSoapValue(positionInfoBody, "RelTime")),
+            ParseHmsToTicks(ParseSoapValue(positionInfoBody, "TrackDuration")));
+    }
+
+    /// <summary>
+    /// Reads the text of one element of a SOAP response (the first occurrence).
+    /// </summary>
+    /// <param name="body">The response body.</param>
+    /// <param name="element">The element name.</param>
+    /// <returns>The raw (still XML-escaped) text, or null when absent.</returns>
+    internal static string? ParseSoapValue(string body, string element)
+    {
+        Match match = Regex.Match(body ?? string.Empty, $"<{element}>(.*?)</{element}>", RegexOptions.Singleline | RegexOptions.CultureInvariant);
+        return match.Success ? match.Groups[1].Value : null;
+    }
+
+    /// <summary>
+    /// Converts a Sonos <c>H:MM:SS</c> time (optionally with fractional seconds) to ticks;
+    /// <c>NOT_IMPLEMENTED</c> and malformed values give 0.
+    /// </summary>
+    /// <param name="hms">The time text.</param>
+    /// <returns>The ticks.</returns>
+    internal static long ParseHmsToTicks(string? hms)
+    {
+        if (string.IsNullOrWhiteSpace(hms))
+        {
+            return 0;
+        }
+
+        string[] parts = hms.Trim().Split(':');
+        if (parts.Length != 3
+            || !int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int hours)
+            || !int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int minutes)
+            || !double.TryParse(parts[2], NumberStyles.Float, CultureInfo.InvariantCulture, out double seconds))
+        {
+            return 0;
+        }
+
+        return (long)Math.Round(((hours * 3600d) + (minutes * 60d) + seconds) * TimeSpan.TicksPerSecond);
+    }
+
+    /// <summary>
+    /// Extracts the Jellyfin item id from one of the stream URLs this caster hands the
+    /// speaker (<c>/Audio/{id}/stream…</c>).
+    /// </summary>
+    /// <param name="trackUri">The speaker's current track URI.</param>
+    /// <param name="itemId">The item id when the URI is a Jellyfin audio stream.</param>
+    /// <returns>True when the URI is a Jellyfin audio stream.</returns>
+    public static bool TryParseJellyfinAudioItem(string? trackUri, out Guid itemId)
+    {
+        itemId = Guid.Empty;
+        if (string.IsNullOrEmpty(trackUri))
+        {
+            return false;
+        }
+
+        Match match = Regex.Match(trackUri, "/Audio/([0-9a-fA-F-]{32,36})/", RegexOptions.CultureInvariant);
+        return match.Success && Guid.TryParse(match.Groups[1].Value, out itemId);
+    }
+
+    private async Task<string> InvokeAsync(string host, string action, IReadOnlyList<KeyValuePair<string, string>> arguments, CancellationToken cancellationToken)
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         cts.CancelAfter(CallTimeout);
@@ -296,5 +397,6 @@ public sealed class SonosQueueCaster
         }
 
         _logger.LogDebug("Sonos cast: {Action} on {Host} answered in {ElapsedMs} ms", action, host, stopwatch.ElapsedMilliseconds.ToString(CultureInfo.InvariantCulture));
+        return body;
     }
 }

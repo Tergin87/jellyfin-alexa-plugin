@@ -12,6 +12,7 @@ using Alexa.NET.Request;
 using Alexa.NET.Request.Type;
 using Alexa.NET.Response;
 using Jellyfin.Plugin.AlexaSkill.Alexa;
+using Jellyfin.Plugin.AlexaSkill.Alexa.Cache;
 using Jellyfin.Plugin.AlexaSkill.Alexa.Handler;
 using Jellyfin.Plugin.AlexaSkill.Alexa.Locale;
 using Jellyfin.Plugin.AlexaSkill.Alexa.Pipeline;
@@ -54,6 +55,7 @@ public class AlexaSkillController : ControllerBase
     private readonly SonosQueueCaster? _sonosCaster;
     private readonly ILibraryManager? _libraryManager;
     private readonly DeviceQueueManager? _queueManager;
+    private readonly SonosPlaybackMonitor? _sonosMonitor;
 
     private readonly CsrfTokenHandler _csrfTokenHandler;
 
@@ -69,6 +71,7 @@ public class AlexaSkillController : ControllerBase
     /// <param name="sonosCaster">The Sonos native-queue caster (proof of concept); null in tests.</param>
     /// <param name="libraryManager">The library manager, used to describe cast tracks; null in tests.</param>
     /// <param name="queueManager">The device queue manager, the play order of a cast; null in tests.</param>
+    /// <param name="sonosMonitor">The Sonos playback monitor (reports a cast's playback to Jellyfin); null in tests.</param>
     public AlexaSkillController(
         IUserManager userManager,
         ISessionManager sessionManager,
@@ -78,8 +81,10 @@ public class AlexaSkillController : ControllerBase
         IEnumerable<BaseHandler> handlers,
         SonosQueueCaster? sonosCaster = null,
         ILibraryManager? libraryManager = null,
-        DeviceQueueManager? queueManager = null)
+        DeviceQueueManager? queueManager = null,
+        SonosPlaybackMonitor? sonosMonitor = null)
     {
+        _sonosMonitor = sonosMonitor;
         _userManager = userManager;
         _sessionManager = sessionManager;
         _logger = loggerFactory.CreateLogger<AlexaSkillController>();
@@ -597,7 +602,44 @@ public class AlexaSkillController : ControllerBase
 
         string spoken = tracks.Count > 1 && !string.IsNullOrWhiteSpace(albumName) ? albumName : tracks[0].Title;
         SonosCastRouting.ToCastConfirmation(skillResponse, ResponseStrings.Get("SonosCastStarted", BaseHandler.GetLocalePublic(request), spoken));
+
+        await StartSonosMonitorAsync(config.SonosCastHost, deviceId, user).ConfigureAwait(false);
         return true;
+    }
+
+    /// <summary>
+    /// Hands the cast to the playback monitor so the speaker's playback is reported to
+    /// Jellyfin. The Jellyfin session is the one the handler pipeline just used for this
+    /// device (cached), with a direct lookup as fallback; without a session the cast still
+    /// plays, only the reporting is skipped.
+    /// </summary>
+    private async Task StartSonosMonitorAsync(string host, string deviceId, Entities.User user)
+    {
+        if (_sonosMonitor == null)
+        {
+            return;
+        }
+
+        SessionInfo? session = null;
+        try
+        {
+            if (!SessionReferenceCache.TryGet(user.JellyfinToken, deviceId, out session) || session == null)
+            {
+                session = await _sessionManager.GetSessionByAuthenticationToken(user.JellyfinToken, deviceId, Plugin.Instance!.Configuration.ServerAddress).ConfigureAwait(false);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Sonos cast: Jellyfin session lookup failed for device {DeviceId}; playback will not be reported", deviceId);
+        }
+
+        if (session == null)
+        {
+            _logger.LogWarning("Sonos cast: no Jellyfin session for device {DeviceId}; playback will not be reported", deviceId);
+            return;
+        }
+
+        _sonosMonitor.Start(host, session);
     }
 
     /// <summary>

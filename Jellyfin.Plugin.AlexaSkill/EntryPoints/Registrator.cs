@@ -114,6 +114,7 @@ public class Registrator : IPluginServiceRegistrator
         // Sonos native-queue cast (proof of concept): fills a speaker's own queue over UPnP
         // instead of answering AudioPlayer.Play for the configured Sonos device.
         serviceCollection.AddSingleton<Alexa.Playback.SonosQueueCaster>();
+        serviceCollection.AddSingleton<Alexa.Playback.SonosPlaybackMonitor>();
 
         // Intent / event / error handlers — auto-discovered from this assembly
         foreach (var handlerType in RegisteredHandlerTypes())
