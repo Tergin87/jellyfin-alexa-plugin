@@ -427,6 +427,17 @@ public class PluginConfiguration : BasePluginConfiguration
 #pragma warning restore CA2227
 
     /// <summary>
+    /// Gets or sets the Alexa device ids learned as split-endpoint speakers (Sonos Era 100:
+    /// voice requests and AudioPlayer events carry two different device ids). Their play
+    /// responses take the shape of the self-hosted skill that chained tracks on that
+    /// speaker (see SplitEndpointCompatibility). Learned at the first device-alias re-key
+    /// and persisted so the first play after a server restart already uses that shape.
+    /// </summary>
+#pragma warning disable CA2227
+    public Collection<string> SplitEndpointDeviceIds { get; set; } = new();
+#pragma warning restore CA2227
+
+    /// <summary>
     /// Finds the library binding for an Alexa device id, or null when the device is
     /// not bound. Case-insensitive device id compare (the config UI round-trips the
     /// exact id, but hand-edited config files have drifted case before).

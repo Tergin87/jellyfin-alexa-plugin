@@ -335,11 +335,15 @@ public class AlexaSkillController : ControllerBase
             // Split-endpoint speakers (Sonos Era 100): re-key the request to the device the
             // playing stream was issued for, so its events reach that device's queue.
             string? reportedDeviceId = req.Context.System.Device?.DeviceID;
+            string? rawPlayingToken = PlaybackDeviceAliases.GetPlayingToken(req);
+            SplitEndpointCompatibility.NormalizeInboundTokens(req);
             string? playingToken = PlaybackDeviceAliases.GetPlayingToken(req);
             string? ownerDeviceId = PlaybackDeviceAliases.Shared.ResolveOwner(reportedDeviceId, playingToken);
+            bool splitEndpointLearned = false;
             if (ownerDeviceId != null)
             {
                 req.Context.System.Device!.DeviceID = ownerDeviceId;
+                splitEndpointLearned = SplitEndpointCompatibility.Remember(Plugin.Instance!.Configuration.SplitEndpointDeviceIds, ownerDeviceId);
             }
 
             string deviceId = req.Context.System.Device?.DeviceID ?? "unknown";
@@ -364,6 +368,19 @@ public class AlexaSkillController : ControllerBase
                     _logger.LogInformation(
                         "Device alias: request from device {ReportedDeviceId} re-keyed to device {OwnerDeviceId}, which the playing stream was issued for",
                         reportedDeviceId, ownerDeviceId);
+
+                    if (splitEndpointLearned)
+                    {
+                        _logger.LogInformation("Device alias: device {OwnerDeviceId} learned as a split-endpoint speaker", ownerDeviceId);
+                        try
+                        {
+                            Plugin.Instance!.SaveConfiguration();
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Could not persist the learned split-endpoint device; it stays active until restart");
+                        }
+                    }
                 }
                 else if (req.Request is AudioPlayerRequest)
                 {
@@ -446,7 +463,14 @@ public class AlexaSkillController : ControllerBase
                 }
 
                 SkillResponse skillResponse = await _pipeline.ExecuteAsync(selectedHandler, req.Request, req.Context, req.Session, cts.Token).ConfigureAwait(false);
-                PlaybackDeviceAliases.Shared.RecordIssuedTokens(req.Context.System?.Device?.DeviceID, skillResponse);
+                string? responseDeviceId = req.Context.System?.Device?.DeviceID;
+                PlaybackDeviceAliases.Shared.RecordIssuedTokens(responseDeviceId, skillResponse);
+                if (SplitEndpointCompatibility.IsKnown(Plugin.Instance!.Configuration.SplitEndpointDeviceIds, responseDeviceId)
+                    && SplitEndpointCompatibility.Apply(skillResponse, user.Id, rawPlayingToken))
+                {
+                    _logger.LogInformation("Split-endpoint compatibility: play response rewritten to the self-hosted skill shape (universal URL, N-format token, no shouldEndSession)");
+                }
+
                 return SkillResponseContent(skillResponse);
             }
         }
