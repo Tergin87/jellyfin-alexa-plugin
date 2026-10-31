@@ -57,8 +57,9 @@ public sealed class SonosQueueCaster
     /// <param name="host">The speaker's LAN host (IP address or name).</param>
     /// <param name="tracks">The tracks, in play order (at least one).</param>
     /// <param name="cancellationToken">The request cancellation token (the Alexa budget).</param>
+    /// <param name="moreTracks">Optional source of further tracks (the progressive queue's remaining pages), called repeatedly in the background until it returns an empty list.</param>
     /// <returns>True when the first track was queued and playback started; false on any UPnP or network failure (logged).</returns>
-    public async Task<bool> CastAsync(string host, IReadOnlyList<SonosTrack> tracks, CancellationToken cancellationToken)
+    public async Task<bool> CastAsync(string host, IReadOnlyList<SonosTrack> tracks, CancellationToken cancellationToken, Func<CancellationToken, Task<IReadOnlyList<SonosTrack>>>? moreTracks = null)
     {
         if (string.IsNullOrWhiteSpace(host) || tracks == null || tracks.Count == 0)
         {
@@ -84,9 +85,9 @@ public sealed class SonosQueueCaster
                 "Sonos cast: playback of \"{Title}\" started on {Host} in {ElapsedMs} ms; {Remaining} more track(s) queued in the background",
                 tracks[0].Title, host, stopwatch.ElapsedMilliseconds, tracks.Count - 1);
 
-            if (tracks.Count > 1)
+            if (tracks.Count > 1 || moreTracks != null)
             {
-                _ = Task.Run(() => AppendTailAsync(host, tracks), CancellationToken.None);
+                _ = Task.Run(() => AppendTailAsync(host, tracks, moreTracks), CancellationToken.None);
             }
 
             return true;
@@ -166,7 +167,9 @@ public sealed class SonosQueueCaster
     {
         var sb = new StringBuilder();
         sb.Append("<DIDL-Lite xmlns:dc=\"http://purl.org/dc/elements/1.1/\" xmlns:upnp=\"urn:schemas-upnp-org:metadata-1-0/upnp/\" xmlns:r=\"urn:schemas-rinconnetworks-com:metadata-1-0/\" xmlns=\"urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/\">");
-        sb.Append("<item id=\"-1\" parentID=\"-1\" restricted=\"true\">");
+        // A unique id per row: with every item named "-1" the Sonos app's queue view
+        // rendered anonymous lines although the stored metadata was complete.
+        sb.Append("<item id=\"").Append(SecurityElement.Escape(string.IsNullOrEmpty(track.Id) ? "-1" : track.Id)).Append("\" parentID=\"-1\" restricted=\"true\">");
         sb.Append("<res protocolInfo=\"http-get:*:").Append(SecurityElement.Escape(track.MimeType)).Append(":*\">").Append(SecurityElement.Escape(track.Url)).Append("</res>");
         sb.Append("<dc:title>").Append(SecurityElement.Escape(track.Title)).Append("</dc:title>");
         if (!string.IsNullOrEmpty(track.Artist))
@@ -216,7 +219,7 @@ public sealed class SonosQueueCaster
 
     private static KeyValuePair<string, string> Arg(string name, string value) => new(name, value);
 
-    private async Task AppendTailAsync(string host, IReadOnlyList<SonosTrack> tracks)
+    private async Task AppendTailAsync(string host, IReadOnlyList<SonosTrack> tracks, Func<CancellationToken, Task<IReadOnlyList<SonosTrack>>>? moreTracks)
     {
         using var cts = new CancellationTokenSource(TailTimeout);
         int added = 0;
@@ -228,11 +231,32 @@ public sealed class SonosQueueCaster
                 added++;
             }
 
-            _logger.LogInformation("Sonos cast: {Added} remaining track(s) appended to the queue on {Host}", added, host);
+            // The progressive queue only materializes its first page at launch (the rest
+            // used to arrive on PlaybackNearlyFinished, which a cast never receives):
+            // drain the remaining pages here so the speaker holds the whole album.
+            if (moreTracks != null)
+            {
+                while (true)
+                {
+                    IReadOnlyList<SonosTrack> batch = await moreTracks(cts.Token).ConfigureAwait(false);
+                    if (batch.Count == 0)
+                    {
+                        break;
+                    }
+
+                    foreach (SonosTrack track in batch)
+                    {
+                        await AddToQueueAsync(host, track, cts.Token).ConfigureAwait(false);
+                        added++;
+                    }
+                }
+            }
+
+            _logger.LogInformation("Sonos cast: {Added} more track(s) appended to the queue on {Host}", added, host);
         }
         catch (Exception ex) when (ex is OperationCanceledException or HttpRequestException or InvalidOperationException)
         {
-            _logger.LogWarning(ex, "Sonos cast: queue tail interrupted after {Added} of {Total} remaining track(s) on {Host}", added, tracks.Count - 1, host);
+            _logger.LogWarning(ex, "Sonos cast: queue tail interrupted after {Added} appended track(s) on {Host}", added, host);
         }
     }
 

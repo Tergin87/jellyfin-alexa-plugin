@@ -571,21 +571,8 @@ public class AlexaSkillController : ControllerBase
                 continue;
             }
 
-            string? artist = null;
-            if (item is MediaBrowser.Controller.Entities.Audio.Audio audio)
-            {
-                artist = audio.AlbumArtists.FirstOrDefault() ?? audio.Artists.FirstOrDefault();
-                albumName ??= audio.Album;
-            }
-
-            string itemN = itemGuid.ToString("N");
-            tracks.Add(new SonosTrack(
-                Url: new Uri(serverRoot, $"Audio/{itemN}/stream?static=true&api_key={user.JellyfinToken}").ToString(),
-                Title: item.Name,
-                Artist: artist,
-                Album: item is MediaBrowser.Controller.Entities.Audio.Audio a ? a.Album : null,
-                ArtUrl: item.HasImage(MediaBrowser.Model.Entities.ImageType.Primary, 0) ? new Uri(serverRoot, $"Items/{itemN}/Images/Primary?api_key={user.JellyfinToken}").ToString() : null,
-                MimeType: SonosQueueCaster.MimeTypeForContainer(item.Container)));
+            albumName ??= (item as MediaBrowser.Controller.Entities.Audio.Audio)?.Album;
+            tracks.Add(ToSonosTrack(item, serverRoot, user.JellyfinToken!));
         }
 
         if (tracks.Count == 0)
@@ -594,8 +581,31 @@ public class AlexaSkillController : ControllerBase
             return false;
         }
 
-        _logger.LogInformation("Sonos cast: {Count} track(s) for device {DeviceId} -> {Host}", tracks.Count, deviceId, config.SonosCastHost);
-        if (!await _sonosCaster.CastAsync(config.SonosCastHost, tracks, cancellationToken).ConfigureAwait(false))
+        // The progressive queue stores only its first page (InitialFetchSize) at launch and
+        // remembers the rest as a continuation for PlaybackNearlyFinished, an event a cast
+        // never receives: the caster drains it in the background instead.
+        QueueContinuation? continuation = QueueContinuationStore.Get(user.Id, deviceId);
+        Func<CancellationToken, Task<IReadOnlyList<SonosTrack>>>? moreTracks = null;
+        if (continuation != null)
+        {
+            moreTracks = ct => Task.Run(
+                () =>
+                {
+                    IReadOnlyList<MediaBrowser.Controller.Entities.BaseItem> batch = QueueContinuationFetcher.FetchNextBatch(continuation, _libraryManager, _userManager, _logger, user);
+                    if (batch.Count == 0)
+                    {
+                        QueueContinuationStore.Remove(user.Id, deviceId);
+                    }
+
+                    return (IReadOnlyList<SonosTrack>)batch.Select(i => ToSonosTrack(i, serverRoot, user.JellyfinToken!)).ToList();
+                },
+                ct);
+        }
+
+        _logger.LogInformation(
+            "Sonos cast: {Count} track(s) for device {DeviceId} -> {Host}{More}",
+            tracks.Count, deviceId, config.SonosCastHost, continuation != null ? $" (+ {continuation.SourceType} continuation from index {continuation.StartIndex})" : string.Empty);
+        if (!await _sonosCaster.CastAsync(config.SonosCastHost, tracks, cancellationToken, moreTracks).ConfigureAwait(false))
         {
             return false;
         }
@@ -605,6 +615,24 @@ public class AlexaSkillController : ControllerBase
 
         await StartSonosMonitorAsync(config.SonosCastHost, deviceId, user).ConfigureAwait(false);
         return true;
+    }
+
+    /// <summary>
+    /// Describes a library item for the Sonos queue: stream URL, title, artist, album,
+    /// art and MIME type, keyed by the item id.
+    /// </summary>
+    private static SonosTrack ToSonosTrack(MediaBrowser.Controller.Entities.BaseItem item, Uri serverRoot, string token)
+    {
+        var audio = item as MediaBrowser.Controller.Entities.Audio.Audio;
+        string itemN = item.Id.ToString("N");
+        return new SonosTrack(
+            Url: new Uri(serverRoot, $"Audio/{itemN}/stream?static=true&api_key={token}").ToString(),
+            Title: item.Name,
+            Artist: audio?.AlbumArtists.FirstOrDefault() ?? audio?.Artists.FirstOrDefault(),
+            Album: audio?.Album,
+            ArtUrl: item.HasImage(MediaBrowser.Model.Entities.ImageType.Primary, 0) ? new Uri(serverRoot, $"Items/{itemN}/Images/Primary?api_key={token}").ToString() : null,
+            MimeType: SonosQueueCaster.MimeTypeForContainer(item.Container),
+            Id: itemN);
     }
 
     /// <summary>

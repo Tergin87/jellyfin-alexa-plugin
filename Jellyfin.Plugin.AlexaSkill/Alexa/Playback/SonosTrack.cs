@@ -10,4 +10,5 @@ namespace Jellyfin.Plugin.AlexaSkill.Alexa.Playback;
 /// <param name="Album">The album, when known.</param>
 /// <param name="ArtUrl">The cover art URL, when known.</param>
 /// <param name="MimeType">The MIME type the DIDL resource advertises (see <see cref="SonosQueueCaster.MimeTypeForContainer"/>).</param>
-public sealed record SonosTrack(string Url, string Title, string? Artist, string? Album, string? ArtUrl, string MimeType);
+/// <param name="Id">A stable, unique id for the DIDL item (the Jellyfin item id); the Sonos app keys its queue rows on it. Null falls back to the anonymous "-1".</param>
+public sealed record SonosTrack(string Url, string Title, string? Artist, string? Album, string? ArtUrl, string MimeType, string? Id = null);

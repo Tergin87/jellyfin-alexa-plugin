@@ -106,9 +106,12 @@ public class SonosCastTests
     [Fact]
     public void BuildDidlMetadata_EscapesAndDescribesTheTrack()
     {
-        var track = new SonosTrack("https://jf/Audio/1/stream?static=true&api_key=k", "L'Amour & la machine", "Alain Souchon", "C'est déjà ça", "https://jf/Items/1/Images/Primary", "audio/mp4");
+        var track = new SonosTrack("https://jf/Audio/1/stream?static=true&api_key=k", "L'Amour & la machine", "Alain Souchon", "C'est déjà ça", "https://jf/Items/1/Images/Primary", "audio/mp4", "106c34c96c839e9a25eda3e45af1cfca");
 
         string didl = SonosQueueCaster.BuildDidlMetadata(track);
+
+        Assert.Contains("<item id=\"106c34c96c839e9a25eda3e45af1cfca\" parentID=\"-1\" restricted=\"true\">", didl, StringComparison.Ordinal);
+        Assert.Contains("<item id=\"-1\"", SonosQueueCaster.BuildDidlMetadata(track with { Id = null }), StringComparison.Ordinal);
 
         Assert.Contains("<res protocolInfo=\"http-get:*:audio/mp4:*\">https://jf/Audio/1/stream?static=true&amp;api_key=k</res>", didl, StringComparison.Ordinal);
         Assert.Contains("<dc:title>L&apos;Amour &amp; la machine</dc:title>", didl, StringComparison.Ordinal);
