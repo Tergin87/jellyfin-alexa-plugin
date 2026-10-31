@@ -260,7 +260,7 @@ public sealed class SonosQueueCaster
         }
     }
 
-    private async Task AddToQueueAsync(string host, SonosTrack track, CancellationToken cancellationToken)
+    private async Task AddToQueueAsync(string host, SonosTrack track, CancellationToken cancellationToken, bool asNext = false)
     {
         await InvokeAsync(
             host,
@@ -271,7 +271,7 @@ public sealed class SonosQueueCaster
                 Arg("EnqueuedURI", track.Url),
                 Arg("EnqueuedURIMetaData", BuildDidlMetadata(track)),
                 Arg("DesiredFirstTrackNumberEnqueued", "0"),
-                Arg("EnqueueAsNext", "0"),
+                Arg("EnqueueAsNext", asNext ? "1" : "0"),
             },
             cancellationToken).ConfigureAwait(false);
     }
@@ -296,6 +296,45 @@ public sealed class SonosQueueCaster
         _udnByHost[host] = udn;
         _logger.LogDebug("Sonos cast: player {Host} has UDN {Udn}", host, udn);
         return udn;
+    }
+
+    /// <summary>
+    /// Appends tracks to the speaker's current queue without touching playback: at the
+    /// end, or right after the playing track ("play next").
+    /// </summary>
+    /// <param name="host">The speaker's LAN host.</param>
+    /// <param name="tracks">The tracks to add, in order.</param>
+    /// <param name="asNext">True to insert after the current track instead of appending.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>True when every track was accepted; false on any UPnP or network failure (logged).</returns>
+    public async Task<bool> EnqueueAsync(string host, IReadOnlyList<SonosTrack> tracks, bool asNext, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(host) || tracks == null || tracks.Count == 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            // "Play next" with several tracks: insert in reverse so they end up in order.
+            IEnumerable<SonosTrack> ordered = asNext ? System.Linq.Enumerable.Reverse(tracks) : tracks;
+            foreach (SonosTrack track in ordered)
+            {
+                await AddToQueueAsync(host, track, cancellationToken, asNext).ConfigureAwait(false);
+            }
+
+            _logger.LogInformation("Sonos cast: {Count} track(s) {Where} the queue on {Host}", tracks.Count, asNext ? "inserted next in" : "appended to", host);
+            return true;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or HttpRequestException or InvalidOperationException)
+        {
+            _logger.LogWarning(ex, "Sonos cast: could not add to the queue on {Host}", host);
+            return false;
+        }
     }
 
     /// <summary>

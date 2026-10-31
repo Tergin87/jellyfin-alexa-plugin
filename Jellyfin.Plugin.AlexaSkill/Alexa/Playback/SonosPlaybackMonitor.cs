@@ -80,6 +80,15 @@ public sealed class SonosPlaybackMonitor
     }
 
     /// <summary>
+    /// Whether a loop is following the speaker, i.e. it is (or was until very recently)
+    /// playing content this plugin handed it. The queue intents use it to tell "the Sonos
+    /// is playing our music" from "nothing is playing" when Alexa's own context says idle.
+    /// </summary>
+    /// <param name="host">The speaker's LAN host.</param>
+    /// <returns>True while a loop runs for the host.</returns>
+    public bool IsFollowing(string host) => !string.IsNullOrWhiteSpace(host) && _loops.ContainsKey(host);
+
+    /// <summary>
     /// Stops following a speaker, if a loop is running for it.
     /// </summary>
     /// <param name="host">The speaker's LAN host.</param>

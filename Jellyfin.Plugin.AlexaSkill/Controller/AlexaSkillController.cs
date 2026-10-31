@@ -480,17 +480,26 @@ public class AlexaSkillController : ControllerBase
                     _logger.LogDebug("Routing to FindSongIntentHandler due to active FindSong session (NLU intent was {Intent})", intentName);
                 }
 
+                // Sonos cast: the device queue before the handler runs, so a queue intent's
+                // additions can be diffed out and mirrored into the speaker's queue.
+                bool sonosDevice = SonosCastRouting.ShouldCast(Plugin.Instance!.Configuration, deviceId);
+                List<string>? queueBefore = sonosDevice ? _queueManager?.GetQueue(deviceId)?.ItemIds.ToList() : null;
+
                 SkillResponse skillResponse = await _pipeline.ExecuteAsync(selectedHandler, req.Request, req.Context, req.Session, cts.Token).ConfigureAwait(false);
                 string? responseDeviceId = req.Context.System?.Device?.DeviceID;
 
-                // Sonos native-queue cast (proof of concept): a fresh launch for the configured
-                // Sonos speaker fills the speaker's own queue over the LAN and answers with a
-                // spoken confirmation instead of AudioPlayer.Play. On any failure the original
+                // Sonos native-queue cast: a fresh launch for the configured Sonos speaker
+                // fills the speaker's own queue over the LAN and answers with a spoken
+                // confirmation instead of AudioPlayer.Play; a queue intent while the speaker
+                // plays our music adds to that queue instead. On any failure the original
                 // AudioPlayer response goes out unchanged (the first track still plays).
-                if (SonosCastRouting.ShouldCast(Plugin.Instance!.Configuration, responseDeviceId)
-                    && await TryCastToSonosAsync(skillResponse, req.Request, responseDeviceId!, user, cts.Token).ConfigureAwait(false))
+                if (sonosDevice && responseDeviceId != null)
                 {
-                    return SkillResponseContent(skillResponse);
+                    if (await TryEnqueueOnSonosAsync(skillResponse, req.Request, responseDeviceId, user, queueBefore, cts.Token).ConfigureAwait(false)
+                        || await TryCastToSonosAsync(skillResponse, req.Request, responseDeviceId, user, cts.Token).ConfigureAwait(false))
+                    {
+                        return SkillResponseContent(skillResponse);
+                    }
                 }
 
                 PlaybackDeviceAliases.Shared.RecordIssuedTokens(responseDeviceId, skillResponse);
@@ -614,6 +623,66 @@ public class AlexaSkillController : ControllerBase
         SonosCastRouting.ToCastConfirmation(skillResponse, ResponseStrings.Get("SonosCastStarted", BaseHandler.GetLocalePublic(request), spoken));
 
         await StartSonosMonitorAsync(config.SonosCastHost, deviceId, user).ConfigureAwait(false);
+        return true;
+    }
+
+    /// <summary>
+    /// Sonos queue intents ("add to queue", "play next") while the speaker plays our music:
+    /// the items the handler just added to the device queue are mirrored into the speaker's
+    /// queue (end, or right after the current track). When the handler answered with a launch
+    /// because Alexa's context reports nothing playing (the speaker, not Alexa, is playing),
+    /// the response becomes the plain "added" confirmation so the Sonos queue is not replaced.
+    /// </summary>
+    /// <returns>True when the request was a queue intent handled on the speaker.</returns>
+    private async Task<bool> TryEnqueueOnSonosAsync(SkillResponse skillResponse, Request request, string deviceId, Entities.User user, List<string>? queueBefore, CancellationToken cancellationToken)
+    {
+        if (_sonosCaster == null || _sonosMonitor == null || _libraryManager == null
+            || request is not IntentRequest intentRequest
+            || !SonosCastRouting.IsQueueIntent(intentRequest.Intent?.Name, out bool asNext))
+        {
+            return false;
+        }
+
+        PluginConfiguration config = Plugin.Instance!.Configuration;
+        if (!_sonosMonitor.IsFollowing(config.SonosCastHost))
+        {
+            // Nothing of ours plays on the speaker: a launch (if any) goes through the cast.
+            return false;
+        }
+
+        IReadOnlyList<string> added = SonosCastRouting.NewItemIds(queueBefore, _queueManager?.GetQueue(deviceId)?.ItemIds);
+        if (added.Count == 0 || string.IsNullOrWhiteSpace(config.ServerAddress) || string.IsNullOrWhiteSpace(user.JellyfinToken))
+        {
+            return false;
+        }
+
+        var serverRoot = new Uri(config.ServerAddress);
+        var tracks = new List<SonosTrack>();
+        foreach (string id in added)
+        {
+            if (Guid.TryParse(id, out Guid itemGuid) && _libraryManager.GetItemById(itemGuid) is MediaBrowser.Controller.Entities.BaseItem item)
+            {
+                tracks.Add(ToSonosTrack(item, serverRoot, user.JellyfinToken!));
+            }
+        }
+
+        if (tracks.Count == 0)
+        {
+            return false;
+        }
+
+        _logger.LogInformation("Sonos cast: {Intent} adds {Count} track(s) to the queue on {Host} (asNext={AsNext})", intentRequest.Intent!.Name, tracks.Count, config.SonosCastHost, asNext);
+        if (!await _sonosCaster.EnqueueAsync(config.SonosCastHost, tracks, asNext, cancellationToken).ConfigureAwait(false))
+        {
+            return false;
+        }
+
+        if (SonosCastRouting.FindLaunch(skillResponse) != null)
+        {
+            string locale = BaseHandler.GetLocalePublic(request);
+            SonosCastRouting.ToCastConfirmation(skillResponse, ResponseStrings.Get(asNext ? "PlayNextConfirmed" : "AddedToQueue", locale, tracks[0].Title));
+        }
+
         return true;
     }
 

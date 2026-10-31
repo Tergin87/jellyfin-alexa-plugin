@@ -81,6 +81,29 @@ public class SonosCastTests
         Assert.Equal(new[] { "7d508028-c98e-0445-0f30-c38f8eea7649" }, SonosCastRouting.PlayOrder(guidQueue, "7d508028c98e04450f30c38f8eea7649"));
     }
 
+    [Fact]
+    public void IsQueueIntent_RecognisesTheTwoQueueIntents()
+    {
+        Assert.True(SonosCastRouting.IsQueueIntent("AddToQueueIntent", out bool asNext));
+        Assert.False(asNext);
+        Assert.True(SonosCastRouting.IsQueueIntent("PlayNextIntent", out asNext));
+        Assert.True(asNext);
+        Assert.False(SonosCastRouting.IsQueueIntent("PlayAlbumIntent", out _));
+        Assert.False(SonosCastRouting.IsQueueIntent(null, out _));
+    }
+
+    [Fact]
+    public void NewItemIds_DiffsTheQueueAcrossFormatsAndDuplicates()
+    {
+        var before = new List<string> { "a", "106c34c9-6c83-9e9a-25ed-a3e45af1cfca", "c" };
+        var after = new List<string> { "a", "x", "106c34c96c839e9a25eda3e45af1cfca", "c", "a" };
+
+        Assert.Equal(new[] { "x", "a" }, SonosCastRouting.NewItemIds(before, after));
+        Assert.Empty(SonosCastRouting.NewItemIds(before, before));
+        Assert.Empty(SonosCastRouting.NewItemIds(before, null));
+        Assert.Equal(new[] { "z" }, SonosCastRouting.NewItemIds(null, new List<string> { "z" }));
+    }
+
     [Theory]
     [InlineData("mov,mp4,m4a,3gp,3g2,mj2", "audio/mp4")]
     [InlineData("mp3", "audio/mpeg")]

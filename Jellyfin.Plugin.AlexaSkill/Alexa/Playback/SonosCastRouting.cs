@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using global::Alexa.NET.Response;
 using global::Alexa.NET.Response.Directive;
+using Jellyfin.Plugin.AlexaSkill.Alexa;
 using Jellyfin.Plugin.AlexaSkill.Configuration;
 
 namespace Jellyfin.Plugin.AlexaSkill.Alexa.Playback;
@@ -89,6 +90,52 @@ public static class SonosCastRouting
         }
 
         return queue.ItemIds.Skip(index).ToList();
+    }
+
+    /// <summary>
+    /// Whether an intent adds to the queue rather than launching: "add to queue" (end) or
+    /// "play next" (after the current track).
+    /// </summary>
+    /// <param name="intentName">The intent name.</param>
+    /// <param name="asNext">True for "play next".</param>
+    /// <returns>True for the two queue intents.</returns>
+    public static bool IsQueueIntent(string? intentName, out bool asNext)
+    {
+        asNext = string.Equals(intentName, IntentNames.PlayNext, StringComparison.Ordinal);
+        return asNext || string.Equals(intentName, IntentNames.AddToQueue, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The items a handler added to the device queue: the ids present after the request
+    /// that were not there before (order preserved; duplicates of an existing id count
+    /// once per extra occurrence).
+    /// </summary>
+    /// <param name="before">The queue ids before the handler ran (null: no queue).</param>
+    /// <param name="after">The queue ids after (null: no queue).</param>
+    /// <returns>The added ids.</returns>
+    public static IReadOnlyList<string> NewItemIds(IReadOnlyList<string>? before, IReadOnlyList<string>? after)
+    {
+        if (after == null || after.Count == 0)
+        {
+            return Array.Empty<string>();
+        }
+
+        var remaining = new List<string>(before ?? Array.Empty<string>());
+        var added = new List<string>();
+        foreach (string id in after)
+        {
+            int index = remaining.FindIndex(b => SameItem(b, id));
+            if (index >= 0)
+            {
+                remaining.RemoveAt(index);
+            }
+            else
+            {
+                added.Add(id);
+            }
+        }
+
+        return added;
     }
 
     private static bool SameItem(string a, string b)
