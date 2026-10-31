@@ -709,15 +709,28 @@ public class AlexaSkillController : ControllerBase
     /// <returns>The response, or null to continue with the regular pipeline.</returns>
     private async Task<SkillResponse?> TrySonosTransportAsync(Request request, Entities.User user, CancellationToken cancellationToken)
     {
-        if (_sonosTransport == null || _sonosMonitor == null || _libraryManager == null
-            || request is not IntentRequest intentRequest
-            || !SonosTransportControl.TryMapIntent(intentRequest.Intent?.Name, out SonosTransportControl.Operation operation))
+        if (_sonosTransport == null || _sonosMonitor == null || _libraryManager == null)
+        {
+            return null;
+        }
+
+        SonosTransportControl.Operation operation;
+        IntentRequest? intentRequest = request as IntentRequest;
+        if (request is LaunchRequest)
+        {
+            // A bare launch ("Alexa, open Jellyfin", or an utterance Alexa could not map
+            // to an intent, device-observed with "ask Jellyfin to pause") while the speaker
+            // plays: the regular launch handler would re-launch the last item and REPLACE
+            // the speaker's queue. Saying what's playing is the harmless answer.
+            operation = SonosTransportControl.Operation.WhatsPlaying;
+        }
+        else if (intentRequest == null || !SonosTransportControl.TryMapIntent(intentRequest.Intent?.Name, out operation))
         {
             return null;
         }
 
         if (operation == SonosTransportControl.Operation.WhatsPlaying
-            && intentRequest.Intent!.Slots != null
+            && intentRequest?.Intent?.Slots != null
             && intentRequest.Intent.Slots.TryGetValue("media_info_type", out Slot? infoSlot)
             && !string.IsNullOrWhiteSpace(infoSlot.Value))
         {
