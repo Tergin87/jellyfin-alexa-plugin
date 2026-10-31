@@ -260,7 +260,7 @@ public sealed class SonosQueueCaster
         }
     }
 
-    private async Task AddToQueueAsync(string host, SonosTrack track, CancellationToken cancellationToken, bool asNext = false)
+    private async Task AddToQueueAsync(string host, SonosTrack track, CancellationToken cancellationToken, bool asNext = false, int position = 0)
     {
         await InvokeAsync(
             host,
@@ -270,7 +270,8 @@ public sealed class SonosQueueCaster
                 Arg("InstanceID", "0"),
                 Arg("EnqueuedURI", track.Url),
                 Arg("EnqueuedURIMetaData", BuildDidlMetadata(track)),
-                Arg("DesiredFirstTrackNumberEnqueued", "0"),
+                // 0 = append; otherwise the 1-based queue position the track takes.
+                Arg("DesiredFirstTrackNumberEnqueued", position.ToString(CultureInfo.InvariantCulture)),
                 Arg("EnqueueAsNext", asNext ? "1" : "0"),
             },
             cancellationToken).ConfigureAwait(false);
@@ -316,14 +317,29 @@ public sealed class SonosQueueCaster
 
         try
         {
-            // "Play next" with several tracks: insert in reverse so they end up in order.
-            IEnumerable<SonosTrack> ordered = asNext ? System.Linq.Enumerable.Reverse(tracks) : tracks;
-            foreach (SonosTrack track in ordered)
+            // EnqueueAsNext alone only matters in shuffle mode (device-verified: both adds
+            // landed at the end of a 14-track queue while track 3 played). In normal order
+            // the insertion point must be explicit: the 1-based number of the current track
+            // plus one, then one more per extra track so several land in order.
+            int position = 0;
+            if (asNext)
             {
-                await AddToQueueAsync(host, track, cancellationToken, asNext).ConfigureAwait(false);
+                SonosPlaybackState? state = await GetPlaybackStateAsync(host, cancellationToken).ConfigureAwait(false);
+                position = state is { TrackNumber: > 0 } ? state.TrackNumber + 1 : 0;
             }
 
-            _logger.LogInformation("Sonos cast: {Count} track(s) {Where} the queue on {Host}", tracks.Count, asNext ? "inserted next in" : "appended to", host);
+            foreach (SonosTrack track in tracks)
+            {
+                await AddToQueueAsync(host, track, cancellationToken, asNext, position).ConfigureAwait(false);
+                if (position > 0)
+                {
+                    position++;
+                }
+            }
+
+            _logger.LogInformation(
+                "Sonos cast: {Count} track(s) {Where} the queue on {Host}",
+                tracks.Count, asNext ? (position > 0 ? $"inserted at position {position - tracks.Count} of" : "appended (no current track) to") : "appended to", host);
             return true;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
