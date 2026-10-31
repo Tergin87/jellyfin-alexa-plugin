@@ -677,6 +677,19 @@ public sealed class AlbumPlayService
         (int startIndex, long albumPageResumeTicks) = ResumeMath.FindResumeTrackIndex(
             albumItems, jellyfinUser, userDataManager, resumePosition: true);
 
+        // AlbumResumeEnabled off: "play album X" always means the whole album from track 1.
+        // The page answer is discarded here, and the tracker override and the deep-resume
+        // gate below are both held closed by the same flag.
+        bool albumResumeEnabled = (Plugin.Instance?.Configuration ?? _config).AlbumResumeEnabled;
+        if (!albumResumeEnabled && (startIndex > 0 || albumPageResumeTicks > 0))
+        {
+            _logger.LogInformation(
+                "{Label}: album resume disabled; starting '{AlbumName}' at track 1 instead of track {Index}",
+                logLabel, album.Name, startIndex);
+            startIndex = 0;
+            albumPageResumeTicks = 0;
+        }
+
         // The continuation bookkeeping, computed here so the deep-resume block below
         // can rebase it: how many tracks the page has consumed (the database offset
         // is independent of the resume slice) and whether more remain. JF-753: the
@@ -737,7 +750,8 @@ public sealed class AlbumPlayService
             continuationTotalCount = rePage.ContinuationTotalCount;
             continuationHasMore = rePage.ContinuationHasMore;
         }
-        if (_launch.GetVideoAppForAudio(user)
+        if (albumResumeEnabled
+            && _launch.GetVideoAppForAudio(user)
             && Interface.VideoAppCapabilities.DeviceSupportsVideoApp(context)
             && Plugin.Instance?.AudiobookPositionTracker?.GetPositionTicks(album.Id.ToString()) is long tracked and > 0)
         {
@@ -841,7 +855,7 @@ public sealed class AlbumPlayService
         bool albumResumeProbeHit = false;
         // One gate, two consumers (the probe and the deep fetch it releases):
         // the twin book head hoists the same shape (deepResumeEligible).
-        bool albumDeepResumeGateOpen = !trackerOverrideEngaged && albumPageResumeTicks == 0 && continuationHasMore;
+        bool albumDeepResumeGateOpen = albumResumeEnabled && !trackerOverrideEngaged && albumPageResumeTicks == 0 && continuationHasMore;
         if (albumDeepResumeGateOpen)
         {
             albumResumeProbeHit = await QueueContinuationFetcher.MayHaveResumeRelevantUserDataAsync(

@@ -114,6 +114,7 @@ public class SonosCastTests
         Assert.Contains("<dc:title>L&apos;Amour &amp; la machine</dc:title>", didl, StringComparison.Ordinal);
         Assert.Contains("<dc:creator>Alain Souchon</dc:creator>", didl, StringComparison.Ordinal);
         Assert.Contains("<upnp:class>object.item.audioItem.musicTrack</upnp:class>", didl, StringComparison.Ordinal);
+        Assert.Contains("<desc id=\"cdudn\" nameSpace=\"urn:schemas-rinconnetworks-com:metadata-1-0/\">RINCON_AssociatedZPUDN</desc>", didl, StringComparison.Ordinal);
     }
 
     [Fact]

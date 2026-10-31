@@ -455,6 +455,14 @@ public class PluginConfiguration : BasePluginConfiguration
     public string SonosCastDeviceIds { get; set; } = string.Empty;
 
     /// <summary>
+    /// Gets or sets a value indicating whether "play album X" resumes at the first track
+    /// not yet played (the upstream behavior, default) or always starts at track 1. Off,
+    /// the resume-track scan, the seek-mode tracker override and the deep-resume re-page
+    /// are all skipped: the queue is the whole album from its first track.
+    /// </summary>
+    public bool AlbumResumeEnabled { get; set; } = true;
+
+    /// <summary>
     /// Finds the library binding for an Alexa device id, or null when the device is
     /// not bound. Case-insensitive device id compare (the config UI round-trips the
     /// exact id, but hand-edited config files have drifted case before).

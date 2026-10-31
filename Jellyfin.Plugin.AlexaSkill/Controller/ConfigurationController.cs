@@ -594,6 +594,9 @@ public class ConfigurationController : ControllerBase
         if (req.TryGetValue("PauseKeepsSession", out var pauseKeepsToken) && pauseKeepsToken.Type == JTokenType.Boolean)
         { config.PauseKeepsSession = pauseKeepsToken.Value<bool>(); updated = true; }
 
+        if (req.TryGetValue("AlbumResumeEnabled", out var albumResumeToken) && albumResumeToken.Type == JTokenType.Boolean)
+        { config.AlbumResumeEnabled = albumResumeToken.Value<bool>(); updated = true; }
+
         if (req.TryGetValue("NativeControlsForAudio", out var nativeControlsToken) && nativeControlsToken.Type == JTokenType.Boolean)
         { config.NativeControlsForAudio = nativeControlsToken.Value<bool>(); updated = true; }
 
@@ -1067,19 +1070,16 @@ public class ConfigurationController : ControllerBase
 
     /// <summary>
     /// Validates the invocation name. An empty/whitespace value is valid — it means
-    /// "use locale defaults" (it-IT → "mia collezione", other locales → "jellyfin player";
-    /// the effective name deployed to Amazon is always a valid 2+ word default). A
-    /// non-empty value must still be at least two words (Amazon's requirement).
+    /// "use locale defaults" (it-IT → "mia collezione", other locales → "jellyfin player").
+    /// A non-empty value is accepted as typed: Amazon's "two or more words" rule is a
+    /// CERTIFICATION requirement, not a build one (a one-word name such as "jellyfin"
+    /// builds and works in the development stage, the only stage a self-hosted skill
+    /// ever runs in; live-verified on the maintainer's own skill). Any name Amazon does
+    /// reject surfaces through the SMAPI redeploy error on save, with Amazon's message.
     /// </summary>
     private static bool IsValidInvocationName(string name)
     {
-        string trimmed = (name ?? string.Empty).Trim();
-        if (trimmed.Length == 0)
-        {
-            return true;
-        }
-
-        return trimmed.Contains(' ', StringComparison.Ordinal);
+        return name == null || name.Trim().Length == 0 || name.Trim().Length <= 50;
     }
 
     /// <summary>

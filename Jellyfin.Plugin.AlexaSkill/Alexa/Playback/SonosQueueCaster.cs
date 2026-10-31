@@ -185,6 +185,10 @@ public sealed class SonosQueueCaster
         }
 
         sb.Append("<upnp:class>object.item.audioItem.musicTrack</upnp:class>");
+        // Sonos reads the title/artist/art of a plain http item only when the item names
+        // its owning service; RINCON_AssociatedZPUDN is the local-player marker every
+        // controller library (SoCo, node-sonos) sends for such items.
+        sb.Append("<desc id=\"cdudn\" nameSpace=\"urn:schemas-rinconnetworks-com:metadata-1-0/\">RINCON_AssociatedZPUDN</desc>");
         sb.Append("</item></DIDL-Lite>");
         return sb.ToString();
     }

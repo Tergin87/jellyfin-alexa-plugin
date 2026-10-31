@@ -240,6 +240,10 @@
                                 <label><input type="checkbox" is="emby-checkbox" id="PauseKeepsSession" /> <span>Keep Session Open on Pause (experimental)</span></label>
                                 <div class="fieldDescription checkboxFieldDescription">EXPERIMENTAL (retest of the JF-299 session rule, tracked as JF-482): when you pause, keep the Alexa session open so a bare follow-up command like "play jazz" reaches this skill instead of the device's default music service. Audio always stops either way; only the session stays open. Off by default (pause ends the session, today's behavior). "Stop" and "Cancel" always close the session regardless of this toggle.</div>
                             </div>
+                            <div class="checkboxContainer checkboxContainer-withDescription">
+                                <label><input type="checkbox" is="emby-checkbox" id="AlbumResumeEnabled" /> <span>Resume Albums Where You Left Off</span></label>
+                                <div class="fieldDescription checkboxFieldDescription">On (default): "play album X" starts at the first track you have not finished yet. Off: an album always starts at track 1 and the whole album is queued.</div>
+                            </div>
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="SonosCastHost">Sonos speaker address (proof of concept)</label>
                                 <input id="SonosCastHost" name="SonosCastHost" type="text" is="emby-input" />
@@ -568,6 +572,7 @@
 
                     // Pause session experiment (JF-482, default-false flag)
                     document.querySelector("#PauseKeepsSession").checked = config.PauseKeepsSession === true;
+                    document.querySelector("#AlbumResumeEnabled").checked = config.AlbumResumeEnabled !== false;
                     document.querySelector("#SonosCastHost").value = config.SonosCastHost || "";
                     document.querySelector("#SonosCastDeviceIds").value = config.SonosCastDeviceIds || "";
 
@@ -618,10 +623,10 @@
             function isValidInvocationName(value) {
                 // JF-300: empty is valid — it means "use locale defaults"
                 // (it-IT → "mia collezione", other locales → "jellyfin player").
-                // A non-empty value must still have at least 2 words.
+                // One-word names are accepted: Amazon's "two or more words" rule is a
+                // certification requirement; the development stage builds them fine.
                 var trimmed = (value || "").trim();
-                if (trimmed.length === 0) return true;
-                return trimmed.includes(" ");
+                return trimmed.length <= 50;
             }
 
             function validateInvocationName(input) {
@@ -1450,12 +1455,12 @@
                 invField.appendChild(invInputWrap);
                 var invDesc = document.createElement("div");
                 invDesc.className = "fieldDescription";
-                invDesc.textContent = 'Empty = use locale defaults ("mia collezione" for it-IT, "jellyfin player" elsewhere). Otherwise two or more words. A custom name applies to ALL locales and triggers an Amazon redeploy on save (~15-30s).';
+                invDesc.textContent = 'Empty = use locale defaults ("mia collezione" for it-IT, "jellyfin player" elsewhere). A one-word name (e.g. "jellyfin") works in the development stage; Amazon only enforces two or more words at certification. A custom name applies to ALL locales and triggers an Amazon redeploy on save (~15-30s).';
                 invField.appendChild(invDesc);
                 var errMsg = document.createElement("div");
                 errMsg.classList.add("invocation-name-error");
                 errMsg.style.cssText = "display:none;color:#e5a00d;font-size:0.85em;margin-top:0.25em;";
-                errMsg.textContent = "Invocation name must contain at least 2 words.";
+                errMsg.textContent = "Invocation name is too long (50 characters max).";
                 invField.appendChild(errMsg);
                 invGroup.appendChild(invField);
 
@@ -1544,6 +1549,7 @@
 
                     // Pause session experiment (JF-482, default-false flag)
                     config.PauseKeepsSession = document.querySelector("#PauseKeepsSession").checked;
+                    config.AlbumResumeEnabled = document.querySelector("#AlbumResumeEnabled").checked;
                     config.SonosCastHost = document.querySelector("#SonosCastHost").value.trim();
                     config.SonosCastDeviceIds = document.querySelector("#SonosCastDeviceIds").value.trim();
 
@@ -1615,6 +1621,7 @@
                         SeekEnabled: config.SeekEnabled,
                         PauseAnnouncePosition: config.PauseAnnouncePosition,
                         PauseKeepsSession: config.PauseKeepsSession,
+                        AlbumResumeEnabled: config.AlbumResumeEnabled,
                         SonosCastHost: config.SonosCastHost,
                         SonosCastDeviceIds: config.SonosCastDeviceIds,
                         NativeControlsForAudio: config.NativeControlsForAudio,
@@ -1805,7 +1812,7 @@
                         // JF-367: warn when rows were skipped so a partial save can't
                         // look fully successful. The per-row inline error still shows.
                         if (skippedRows > 0) {
-                            Dashboard.alert(skippedRows + " user(s) not saved. Check each row: the invocation name must be empty (use locale defaults) or at least 2 words, and all dropdowns must have a selected value. Expand the row to fix, then Save again.");
+                            Dashboard.alert(skippedRows + " user(s) not saved. Check each row: the invocation name must be empty (use locale defaults) or at most 50 characters, and all dropdowns must have a selected value. Expand the row to fix, then Save again.");
                         }
                     });
                 });
