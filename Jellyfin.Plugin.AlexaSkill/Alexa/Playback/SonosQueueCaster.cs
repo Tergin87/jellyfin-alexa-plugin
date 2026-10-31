@@ -307,8 +307,9 @@ public sealed class SonosQueueCaster
     /// <param name="tracks">The tracks to add, in order.</param>
     /// <param name="asNext">True to insert after the current track instead of appending.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <param name="currentTrackNumber">The 1-based queue position of the playing track when the caller knows it (the monitor's last reading); the speaker is asked otherwise.</param>
     /// <returns>True when every track was accepted; false on any UPnP or network failure (logged).</returns>
-    public async Task<bool> EnqueueAsync(string host, IReadOnlyList<SonosTrack> tracks, bool asNext, CancellationToken cancellationToken)
+    public async Task<bool> EnqueueAsync(string host, IReadOnlyList<SonosTrack> tracks, bool asNext, CancellationToken cancellationToken, int? currentTrackNumber = null)
     {
         if (string.IsNullOrWhiteSpace(host) || tracks == null || tracks.Count == 0)
         {
@@ -321,11 +322,20 @@ public sealed class SonosQueueCaster
             // landed at the end of a 14-track queue while track 3 played). In normal order
             // the insertion point must be explicit: the 1-based number of the current track
             // plus one, then one more per extra track so several land in order.
+            // During a voice interaction Alexa holds the queue, so the speaker's own position
+            // report is not trustworthy: prefer the monitor's last reading when given.
             int position = 0;
             if (asNext)
             {
-                SonosPlaybackState? state = await GetPlaybackStateAsync(host, cancellationToken).ConfigureAwait(false);
-                position = state is { TrackNumber: > 0 } ? state.TrackNumber + 1 : 0;
+                if (currentTrackNumber is > 0)
+                {
+                    position = currentTrackNumber.Value + 1;
+                }
+                else
+                {
+                    SonosPlaybackState? state = await GetPlaybackStateAsync(host, cancellationToken).ConfigureAwait(false);
+                    position = state is { TrackNumber: > 0 } ? state.TrackNumber + 1 : 0;
+                }
             }
 
             foreach (SonosTrack track in tracks)

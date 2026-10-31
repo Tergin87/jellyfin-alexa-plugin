@@ -46,6 +46,17 @@ public sealed class SonosPlaybackMonitor
     private readonly ISessionManager _sessionManager;
     private readonly ILogger<SonosPlaybackMonitor> _logger;
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _loops = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, int> _lastTrackNumber = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The 1-based queue position of our track the speaker was last seen playing, or null.
+    /// Read during a voice interaction, when the speaker's own position report belongs to
+    /// Alexa's hold rather than to the queue.
+    /// </summary>
+    /// <param name="host">The speaker's LAN host.</param>
+    /// <returns>The last known track number while our content played.</returns>
+    public int? LastKnownTrackNumber(string host)
+        => !string.IsNullOrWhiteSpace(host) && _lastTrackNumber.TryGetValue(host, out int track) && track > 0 ? track : null;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SonosPlaybackMonitor"/> class.
@@ -153,6 +164,11 @@ public sealed class SonosPlaybackMonitor
                 else
                 {
                     idleSince = DateTime.MaxValue;
+                    if (state.TrackNumber > 0)
+                    {
+                        _lastTrackNumber[host] = state.TrackNumber;
+                    }
+
                     if (itemId != currentItem)
                     {
                         if (currentItem != Guid.Empty)

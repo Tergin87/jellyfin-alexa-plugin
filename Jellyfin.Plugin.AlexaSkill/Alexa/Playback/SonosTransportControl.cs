@@ -164,18 +164,27 @@ public sealed class SonosTransportControl
         switch (operation)
         {
             case Operation.Pause:
-                return await _caster.TransportAsync(host, "Pause", cancellationToken).ConfigureAwait(false)
-                    ? ResponseBuilder.Tell(ResponseStrings.Get("PauseSessionSpeech", locale))
-                    : null;
+            case Operation.Stop:
+            {
+                // Alexa on the speaker holds the queue while it listens and speaks, then
+                // RESTORES playback when the interaction ends, which undoes a pause or stop
+                // sent during the exchange (device-observed: next/start-over "worked" because
+                // the restore is exactly what they want; pause and stop did not). Apply now,
+                // then re-apply for a few seconds after the answer whenever the speaker is
+                // found playing again.
+                string action = operation == Operation.Pause ? "Pause" : "Stop";
+                if (!await _caster.TransportAsync(host, action, cancellationToken).ConfigureAwait(false))
+                {
+                    return null;
+                }
+
+                _ = Task.Run(() => ReapplyAfterAlexaRestoresAsync(host, action), CancellationToken.None);
+                return ResponseBuilder.Tell(ResponseStrings.Get(operation == Operation.Pause ? "PauseSessionSpeech" : "MusicStoppedByVoice", locale));
+            }
 
             case Operation.Resume:
                 return await _caster.TransportAsync(host, "Play", cancellationToken, new KeyValuePair<string, string>("Speed", "1")).ConfigureAwait(false)
                     ? ResponseBuilder.Tell(ResponseStrings.Get("ResumeBrief", locale))
-                    : null;
-
-            case Operation.Stop:
-                return await _caster.TransportAsync(host, "Stop", cancellationToken).ConfigureAwait(false)
-                    ? ResponseBuilder.Tell(ResponseStrings.Get("MusicStoppedByVoice", locale))
                     : null;
 
             case Operation.Next:
@@ -243,6 +252,34 @@ public sealed class SonosTransportControl
 
             default:
                 return null;
+        }
+    }
+
+    /// <summary>
+    /// The re-apply schedule after a pause/stop: Alexa's spoken answer and playback
+    /// restore land within a few seconds of the response.
+    /// </summary>
+    internal static readonly int[] ReapplyDelaysMs = { 1500, 1500, 2000, 3000 };
+
+    private async Task ReapplyAfterAlexaRestoresAsync(string host, string action)
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        try
+        {
+            foreach (int delay in ReapplyDelaysMs)
+            {
+                await Task.Delay(delay, cts.Token).ConfigureAwait(false);
+                SonosPlaybackState? state = await _caster.GetPlaybackStateAsync(host, cts.Token).ConfigureAwait(false);
+                if (state is { TransportState: "PLAYING" or "TRANSITIONING" })
+                {
+                    _logger.LogInformation("Sonos transport: speaker resumed after the answer; re-applying {Action} on {Host}", action, host);
+                    await _caster.TransportAsync(host, action, cts.Token).ConfigureAwait(false);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Window over.
         }
     }
 

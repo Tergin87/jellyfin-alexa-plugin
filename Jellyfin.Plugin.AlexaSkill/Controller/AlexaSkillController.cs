@@ -685,7 +685,7 @@ public class AlexaSkillController : ControllerBase
         }
 
         _logger.LogInformation("Sonos cast: {Intent} adds {Count} track(s) to the queue on {Host} (asNext={AsNext})", intentRequest.Intent!.Name, tracks.Count, config.SonosCastHost, asNext);
-        if (!await _sonosCaster.EnqueueAsync(config.SonosCastHost, tracks, asNext, cancellationToken).ConfigureAwait(false))
+        if (!await _sonosCaster.EnqueueAsync(config.SonosCastHost, tracks, asNext, cancellationToken, _sonosMonitor.LastKnownTrackNumber(config.SonosCastHost)).ConfigureAwait(false))
         {
             return false;
         }
