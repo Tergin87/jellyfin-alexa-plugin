@@ -374,7 +374,7 @@ public class AlexaSkillController : ControllerBase
                         _logger.LogInformation("Device alias: device {OwnerDeviceId} learned as a split-endpoint speaker", ownerDeviceId);
                         try
                         {
-                            Plugin.Instance!.SaveConfiguration();
+                            Plugin.Instance!.Configuration.PersistUnderLedgerLock();
                         }
                         catch (Exception ex)
                         {
