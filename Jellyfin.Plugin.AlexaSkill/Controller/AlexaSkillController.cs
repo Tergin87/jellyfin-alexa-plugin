@@ -56,6 +56,7 @@ public class AlexaSkillController : ControllerBase
     private readonly ILibraryManager? _libraryManager;
     private readonly DeviceQueueManager? _queueManager;
     private readonly SonosPlaybackMonitor? _sonosMonitor;
+    private readonly SonosTransportControl? _sonosTransport;
 
     private readonly CsrfTokenHandler _csrfTokenHandler;
 
@@ -72,6 +73,7 @@ public class AlexaSkillController : ControllerBase
     /// <param name="libraryManager">The library manager, used to describe cast tracks; null in tests.</param>
     /// <param name="queueManager">The device queue manager, the play order of a cast; null in tests.</param>
     /// <param name="sonosMonitor">The Sonos playback monitor (reports a cast's playback to Jellyfin); null in tests.</param>
+    /// <param name="sonosTransport">The Sonos transport control (transport and what's-playing intents while the speaker plays); null in tests.</param>
     public AlexaSkillController(
         IUserManager userManager,
         ISessionManager sessionManager,
@@ -82,9 +84,11 @@ public class AlexaSkillController : ControllerBase
         SonosQueueCaster? sonosCaster = null,
         ILibraryManager? libraryManager = null,
         DeviceQueueManager? queueManager = null,
-        SonosPlaybackMonitor? sonosMonitor = null)
+        SonosPlaybackMonitor? sonosMonitor = null,
+        SonosTransportControl? sonosTransport = null)
     {
         _sonosMonitor = sonosMonitor;
+        _sonosTransport = sonosTransport;
         _userManager = userManager;
         _sessionManager = sessionManager;
         _logger = loggerFactory.CreateLogger<AlexaSkillController>();
@@ -483,6 +487,15 @@ public class AlexaSkillController : ControllerBase
                 // Sonos cast: the device queue before the handler runs, so a queue intent's
                 // additions can be diffed out and mirrored into the speaker's queue.
                 bool sonosDevice = SonosCastRouting.ShouldCast(Plugin.Instance!.Configuration, deviceId);
+
+                // Sonos transport: while the speaker plays our music, pause/resume/next/
+                // previous/stop/start-over/shuffle/repeat and "what's playing" addressed to
+                // the skill drive or ask the speaker itself; the regular handlers would see
+                // Alexa's idle context and answer "nothing is playing".
+                if (sonosDevice && await TrySonosTransportAsync(req.Request, user, cts.Token).ConfigureAwait(false) is { } transportResponse)
+                {
+                    return SkillResponseContent(transportResponse);
+                }
                 List<string>? queueBefore = sonosDevice ? _queueManager?.GetQueue(deviceId)?.ItemIds.ToList() : null;
 
                 SkillResponse skillResponse = await _pipeline.ExecuteAsync(selectedHandler, req.Request, req.Context, req.Session, cts.Token).ConfigureAwait(false);
@@ -684,6 +697,54 @@ public class AlexaSkillController : ControllerBase
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Sonos transport intents while the speaker plays our music (the monitor follows it):
+    /// the operation runs on the speaker and the answer is spoken here, bypassing the
+    /// regular handler. A "what's playing" follow-up with a specific info slot (album,
+    /// year, ...) stays with the regular handler, whose session now-playing item the
+    /// monitor keeps current.
+    /// </summary>
+    /// <returns>The response, or null to continue with the regular pipeline.</returns>
+    private async Task<SkillResponse?> TrySonosTransportAsync(Request request, Entities.User user, CancellationToken cancellationToken)
+    {
+        if (_sonosTransport == null || _sonosMonitor == null || _libraryManager == null
+            || request is not IntentRequest intentRequest
+            || !SonosTransportControl.TryMapIntent(intentRequest.Intent?.Name, out SonosTransportControl.Operation operation))
+        {
+            return null;
+        }
+
+        if (operation == SonosTransportControl.Operation.WhatsPlaying
+            && intentRequest.Intent!.Slots != null
+            && intentRequest.Intent.Slots.TryGetValue("media_info_type", out Slot? infoSlot)
+            && !string.IsNullOrWhiteSpace(infoSlot.Value))
+        {
+            return null;
+        }
+
+        string host = Plugin.Instance!.Configuration.SonosCastHost;
+        if (!_sonosMonitor.IsFollowing(host))
+        {
+            return null;
+        }
+
+        SkillResponse? response = await _sonosTransport.HandleAsync(
+            host,
+            operation,
+            BaseHandler.GetLocalePublic(request),
+            itemId => _libraryManager.GetItemById(itemId) is MediaBrowser.Controller.Entities.BaseItem item
+                ? (item.Name, (item as MediaBrowser.Controller.Entities.Audio.Audio)?.AlbumArtists.FirstOrDefault() ?? (item as MediaBrowser.Controller.Entities.Audio.Audio)?.Artists.FirstOrDefault(), (item as MediaBrowser.Controller.Entities.Audio.Audio)?.Album)
+                : null,
+            cancellationToken).ConfigureAwait(false);
+
+        if (response == null)
+        {
+            _logger.LogWarning("Sonos transport: {Operation} refused by {Host}; falling back to the regular handler", operation, host);
+        }
+
+        return response;
     }
 
     /// <summary>

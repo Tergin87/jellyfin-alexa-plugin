@@ -354,6 +354,66 @@ public sealed class SonosQueueCaster
     }
 
     /// <summary>
+    /// Runs one AVTransport action with the given arguments (InstanceID is added), e.g.
+    /// <c>Pause</c>, <c>Play</c> (Speed=1), <c>Stop</c>, <c>Next</c>, <c>Previous</c>,
+    /// <c>Seek</c> (Unit, Target), <c>SetPlayMode</c> (NewPlayMode).
+    /// </summary>
+    /// <param name="host">The speaker's LAN host.</param>
+    /// <param name="action">The action name.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <param name="arguments">The action arguments after InstanceID, as name/value pairs.</param>
+    /// <returns>True when the speaker accepted the action; false on any UPnP or network failure (logged).</returns>
+    public async Task<bool> TransportAsync(string host, string action, CancellationToken cancellationToken, params KeyValuePair<string, string>[] arguments)
+    {
+        if (string.IsNullOrWhiteSpace(host))
+        {
+            return false;
+        }
+
+        var args = new List<KeyValuePair<string, string>>(arguments.Length + 1) { Arg("InstanceID", "0") };
+        args.AddRange(arguments);
+        try
+        {
+            await InvokeAsync(host, action, args, cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or HttpRequestException or InvalidOperationException)
+        {
+            _logger.LogWarning(ex, "Sonos cast: {Action} failed on {Host}", action, host);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Reads the speaker's play mode (<c>NORMAL</c>, <c>REPEAT_ALL</c>, <c>REPEAT_ONE</c>,
+    /// <c>SHUFFLE_NOREPEAT</c>, <c>SHUFFLE</c>, <c>SHUFFLE_REPEAT_ONE</c>).
+    /// </summary>
+    /// <param name="host">The speaker's LAN host.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>The play mode, or null when the speaker did not answer.</returns>
+    public async Task<string?> GetPlayModeAsync(string host, CancellationToken cancellationToken)
+    {
+        try
+        {
+            string body = await InvokeAsync(host, "GetTransportSettings", new[] { Arg("InstanceID", "0") }, cancellationToken).ConfigureAwait(false);
+            return ParseSoapValue(body, "PlayMode");
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or HttpRequestException or InvalidOperationException)
+        {
+            _logger.LogDebug(ex, "Sonos cast: could not read the play mode of {Host}", host);
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Reads what the speaker is doing right now: transport state, current track URI and
     /// position (AVTransport <c>GetTransportInfo</c> + <c>GetPositionInfo</c>).
     /// </summary>

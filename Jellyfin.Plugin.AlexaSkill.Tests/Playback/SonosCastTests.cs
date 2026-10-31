@@ -81,6 +81,48 @@ public class SonosCastTests
         Assert.Equal(new[] { "7d508028-c98e-0445-0f30-c38f8eea7649" }, SonosCastRouting.PlayOrder(guidQueue, "7d508028c98e04450f30c38f8eea7649"));
     }
 
+    [Theory]
+    [InlineData("AMAZON.PauseIntent", SonosTransportControl.Operation.Pause)]
+    [InlineData("AMAZON.ResumeIntent", SonosTransportControl.Operation.Resume)]
+    [InlineData("AMAZON.StopIntent", SonosTransportControl.Operation.Stop)]
+    [InlineData("AMAZON.CancelIntent", SonosTransportControl.Operation.Stop)]
+    [InlineData("AMAZON.NextIntent", SonosTransportControl.Operation.Next)]
+    [InlineData("AMAZON.PreviousIntent", SonosTransportControl.Operation.Previous)]
+    [InlineData("AMAZON.StartOverIntent", SonosTransportControl.Operation.StartOver)]
+    [InlineData("AMAZON.ShuffleOnIntent", SonosTransportControl.Operation.ShuffleOn)]
+    [InlineData("ShuffleAllOffIntent", SonosTransportControl.Operation.ShuffleOff)]
+    [InlineData("AMAZON.LoopOnIntent", SonosTransportControl.Operation.RepeatAll)]
+    [InlineData("LoopSongOnIntent", SonosTransportControl.Operation.RepeatOne)]
+    [InlineData("LoopAllOffIntent", SonosTransportControl.Operation.RepeatOff)]
+    [InlineData("MediaInfoIntent", SonosTransportControl.Operation.WhatsPlaying)]
+    public void TryMapIntent_MapsTransportIntents(string intent, SonosTransportControl.Operation expected)
+    {
+        Assert.True(SonosTransportControl.TryMapIntent(intent, out var operation));
+        Assert.Equal(expected, operation);
+    }
+
+    [Fact]
+    public void TryMapIntent_LeavesOtherIntentsToTheHandlers()
+    {
+        Assert.False(SonosTransportControl.TryMapIntent("PlayAlbumIntent", out _));
+        Assert.False(SonosTransportControl.TryMapIntent("AddToQueueIntent", out _));
+        Assert.False(SonosTransportControl.TryMapIntent(null, out _));
+    }
+
+    [Theory]
+    [InlineData("NORMAL", SonosTransportControl.Operation.ShuffleOn, "SHUFFLE_NOREPEAT")]
+    [InlineData("REPEAT_ALL", SonosTransportControl.Operation.ShuffleOn, "SHUFFLE")]
+    [InlineData("SHUFFLE", SonosTransportControl.Operation.ShuffleOff, "REPEAT_ALL")]
+    [InlineData("SHUFFLE_NOREPEAT", SonosTransportControl.Operation.RepeatAll, "SHUFFLE")]
+    [InlineData("NORMAL", SonosTransportControl.Operation.RepeatOne, "REPEAT_ONE")]
+    [InlineData("SHUFFLE_REPEAT_ONE", SonosTransportControl.Operation.RepeatOff, "SHUFFLE_NOREPEAT")]
+    [InlineData(null, SonosTransportControl.Operation.RepeatAll, "REPEAT_ALL")]
+    [InlineData("WEIRD", SonosTransportControl.Operation.ShuffleOff, "NORMAL")]
+    public void ComposePlayMode_KeepsTheOtherAxis(string? current, SonosTransportControl.Operation operation, string expected)
+    {
+        Assert.Equal(expected, SonosTransportControl.ComposePlayMode(current, operation));
+    }
+
     [Fact]
     public void IsQueueIntent_RecognisesTheTwoQueueIntents()
     {
