@@ -41,7 +41,7 @@ public static class PhoneticSynonymGenerator
 
         string prefix = Util.LocalePrefix.Of(locale);
 
-        return prefix switch
+        List<string> results = prefix switch
         {
             "it" => ItalianPhoneticSynonyms.Generate(name),
             "de" => GermanPhoneticSynonyms.Generate(name),
@@ -52,6 +52,12 @@ public static class PhoneticSynonymGenerator
             "nl" => DutchPhoneticSynonyms.Generate(name),
             _ => new List<string>()
         };
+
+        // Names with digits ("U2", "M83", "Blink-182") are spoken as words; the split and
+        // spelled forms ride outside the phonetic cap (rare names, one or two extra rows),
+        // for every locale including the English family, which has no phonetic generator.
+        AppendDistinct(results, Util.SpokenNumbers.DigitSynonyms(name, locale));
+        return results;
     }
 
     /// <summary>
