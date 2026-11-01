@@ -127,7 +127,9 @@ public static class SpokenNumbers
         }
 
         string language = LocalePrefix.Of(locale ?? string.Empty);
-        string original = query.Trim();
+        // Alexa writes a spelled letter with a period ("m. quatre vingt trois",
+        // device-observed for M83): the period is not part of any library name.
+        string original = Regex.Replace(query.Trim(), "\\b(\\p{L}{1,2})\\.(?=\\s|$)", "$1", RegexOptions.CultureInvariant);
         string spaced = ToDigits(original, language);
         var variants = new List<string>();
         if (!string.Equals(spaced, original, StringComparison.OrdinalIgnoreCase))

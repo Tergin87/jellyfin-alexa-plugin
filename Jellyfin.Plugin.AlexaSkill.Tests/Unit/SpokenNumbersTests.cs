@@ -58,6 +58,8 @@ public class SpokenNumbersTests
     public void QueryVariants_GivesDigitAndCompactForms()
     {
         Assert.Equal(new[] { "u 2", "u2" }, SpokenNumbers.QueryVariants("u deux", "fr-FR"));
+        // The ASR's rendering of a spelled letter, with its period (device log, M83).
+        Assert.Equal(new[] { "m 83", "m83" }, SpokenNumbers.QueryVariants("m. quatre vingt trois", "fr-FR"));
         Assert.Equal(new[] { "m 83", "m83" }, SpokenNumbers.QueryVariants("m quatre vingt trois", "fr-FR"));
         Assert.Equal(new[] { "maroon 5" }, SpokenNumbers.QueryVariants("maroon five", "en-US"));
         Assert.Empty(SpokenNumbers.QueryVariants("pink floyd", "fr-FR"));
