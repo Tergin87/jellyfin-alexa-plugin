@@ -127,15 +127,19 @@ public static class SpokenNumbers
         }
 
         string language = LocalePrefix.Of(locale ?? string.Empty);
-        string spaced = ToDigits(query, language);
-        if (string.Equals(spaced, query.Trim(), StringComparison.OrdinalIgnoreCase))
+        string original = query.Trim();
+        string spaced = ToDigits(original, language);
+        var variants = new List<string>();
+        if (!string.Equals(spaced, original, StringComparison.OrdinalIgnoreCase))
         {
-            return Array.Empty<string>();
+            variants.Add(spaced);
         }
 
-        var variants = new List<string> { spaced };
+        // Alexa also writes "m 83" with the digits already there: the compact "m83" is
+        // how such names are spelled in a library, so it is a variant on its own.
         string compact = Compact(spaced);
-        if (!string.Equals(compact, spaced, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(compact, spaced, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(compact, original, StringComparison.OrdinalIgnoreCase))
         {
             variants.Add(compact);
         }
