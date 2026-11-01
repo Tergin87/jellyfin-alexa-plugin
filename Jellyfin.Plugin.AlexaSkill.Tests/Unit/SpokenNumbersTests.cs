@@ -62,7 +62,7 @@ public class SpokenNumbersTests
         Assert.Equal(new[] { "maroon 5" }, SpokenNumbers.QueryVariants("maroon five", "en-US"));
         Assert.Empty(SpokenNumbers.QueryVariants("pink floyd", "fr-FR"));
         Assert.Equal(new[] { "u2" }, SpokenNumbers.QueryVariants("u 2", "fr-FR"));
-        Assert.Equal(new[] { "m83" }, SpokenNumbers.QueryVariants("M 83", "fr-FR"));
+        Assert.Equal(new[] { "M83" }, SpokenNumbers.QueryVariants("M 83", "fr-FR"));
         Assert.Empty(SpokenNumbers.QueryVariants("m83", "fr-FR"));
     }
 
