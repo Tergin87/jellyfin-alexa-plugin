@@ -776,7 +776,8 @@ internal static class ArtistSearch
         SearchResponseMode mode = SearchResponseMode.Thorough,
         bool asrCompoundWordFixEnabled = false,
         bool parallelDbTiers = false,
-        IReadOnlyList<BaseItem>? preloadedPool = null)
+        IReadOnlyList<BaseItem>? preloadedPool = null,
+        bool spokenNumberRetry = false)
     {
         // JF-643: the ONE query-side romanization for the artist chain (both the
         // in-memory tiers and every database tier below search Latin library names;
@@ -798,6 +799,27 @@ internal static class ArtistSearch
         // pinned (TryEntityFallbackAsync) adds no extra hop. Pin degrades to live
         // reads (the pre-JF-448 behavior) when the implementation cannot pin.
         IArtistIndex? pinned = artistIndex.Pin();
+
+        // Spoken numbers: "u deux" / "m quatre vingt trois" never contain the digits of
+        // "U2" / "M83". When the query carries number words, prefer the digit form that
+        // actually names an artist in the warm index ("u2" before "u 2"); the cold
+        // database path retries the variants at the end of the chain instead.
+        string spokenNumberOriginal = musician;
+        IReadOnlyList<string> spokenNumberVariants = spokenNumberRetry ? Array.Empty<string>() : SpokenNumbers.QueryVariants(musician, locale);
+        if (spokenNumberVariants.Count > 0 && pinned?.IsReady == true)
+        {
+            var probePool = preloadedPool ?? pinned.GetArtists(LibraryFilter.ResolveForUser(user, libraryManager, logger));
+            foreach (string variant in spokenNumberVariants)
+            {
+                if (probePool.Any(a => QueryNameFor(pinned, a).Contains(variant, StringComparison.OrdinalIgnoreCase)))
+                {
+                    logger.LogInformation("ArtistSearch: spoken number words in '{Query}' resolved to '{Variant}'", musician, variant);
+                    musician = variant;
+                    spokenNumberVariants = Array.Empty<string>();
+                    break;
+                }
+            }
+        }
 
         var totalSw = Stopwatch.StartNew();
         var tierSw = Stopwatch.StartNew();
@@ -1109,6 +1131,22 @@ internal static class ArtistSearch
         logger.LogInformation(
             "ArtistSearch: total duration={TotalMs}ms tier_reached={Tier} results={Count} query='{Query}' source={Source} mode={Mode}",
             totalSw.ElapsedMilliseconds, tierReached, artists.Count, musician, searchSource, mode);
+
+        // Cold-index (or no in-memory hit) retry with the digit forms of the spoken query.
+        if (artists.Count == 0 && spokenNumberVariants.Count > 0)
+        {
+            foreach (string variant in spokenNumberVariants)
+            {
+                logger.LogInformation("ArtistSearch: retrying '{Query}' as '{Variant}' (spoken number words)", spokenNumberOriginal, variant);
+                artists = await SearchAsync(
+                    variant, user, libraryManager, artistIndex, logger, dbQuery, locale, cancellationToken,
+                    mode, asrCompoundWordFixEnabled, parallelDbTiers, preloadedPool, spokenNumberRetry: true).ConfigureAwait(false);
+                if (artists.Count > 0)
+                {
+                    break;
+                }
+            }
+        }
 
         return artists;
     }

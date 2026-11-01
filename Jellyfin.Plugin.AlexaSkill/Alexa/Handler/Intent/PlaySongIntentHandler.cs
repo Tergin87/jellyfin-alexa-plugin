@@ -218,6 +218,56 @@ public class PlaySongIntentHandler : BaseHandler
                 artistsIds[0], matchedArtistName!, jellyfinUser!, user, session, context, locale, cancellationToken).ConfigureAwait(false);
         }
 
+        // Artist carrier in the song slot: "joue la musique de M83" reaches this intent
+        // when the artist is missing from the JellyfinArtist catalog (the catalog gate
+        // keeps PlayArtistSongs from being selected), so the free-text song slot holds
+        // the whole "la musique de M83". The locale's own PlayArtistSongs carriers name
+        // the shape; the remainder is searched as an artist and, when the library has
+        // one, plays as the user meant. A miss falls through to the title search.
+        if (string.IsNullOrWhiteSpace(musicianQuery)
+            && Util.ArtistCarrierPhrases.TryStrip(rawSongQuery, locale, out string carriedArtist))
+        {
+            IReadOnlyList<BaseItem> carriedArtists = await Util.ArtistSearch.SearchAsync(
+                carriedArtist, user, _libraryManager, _artistIndex, Logger,
+                (q, ct) => RetryHelper.ExecuteWithRequestBudgetAsync(
+                    () => _libraryManager.GetItemList(q), Logger, "GetArtists", cancellationToken: ct),
+                locale, cancellationToken).ConfigureAwait(false);
+            if (carriedArtists.Count > 0)
+            {
+                Logger.LogInformation(
+                    "PlaySong: song slot '{SongQuery}' carries an artist phrase; playing artist '{Artist}' for '{Remainder}'",
+                    rawSongQuery, carriedArtists[0].Name, carriedArtist);
+                return await PlayArtistSongsFallback(
+                    carriedArtists[0].Id, carriedArtists[0].Name, jellyfinUser!, user, session, context, locale, cancellationToken).ConfigureAwait(false);
+            }
+
+            Logger.LogDebug("PlaySong: artist carrier remainder '{Remainder}' matched no artist; continuing with the title search", carriedArtist);
+        }
+
+        // Bare alphanumeric artist in the song slot: "joue U2" arrives as song "u. two"
+        // when the catalog misses, and the title search then matches every song with
+        // "two" in it. When the spoken number forms of the slot name an artist EXACTLY
+        // ("u2"), that artist is what was asked for; anything looser stays a title search.
+        if (string.IsNullOrWhiteSpace(musicianQuery))
+        {
+            IReadOnlyList<string> numberForms = Util.SpokenNumbers.QueryVariants(songQuery, locale);
+            if (numberForms.Count > 0)
+            {
+                IReadOnlyList<BaseItem> numberArtists = await Util.ArtistSearch.SearchAsync(
+                    songQuery, user, _libraryManager, _artistIndex, Logger,
+                    (q, ct) => RetryHelper.ExecuteWithRequestBudgetAsync(
+                        () => _libraryManager.GetItemList(q), Logger, "GetArtists", cancellationToken: ct),
+                    locale, cancellationToken).ConfigureAwait(false);
+                BaseItem? exact = numberArtists.FirstOrDefault(a => numberForms.Any(f => string.Equals(f, a.Name, StringComparison.OrdinalIgnoreCase)));
+                if (exact != null)
+                {
+                    Logger.LogInformation("PlaySong: song slot '{SongQuery}' names the artist '{Artist}' (spoken number forms); playing the artist", rawSongQuery, exact.Name);
+                    return await PlayArtistSongsFallback(
+                        exact.Id, exact.Name, jellyfinUser!, user, session, context, locale, cancellationToken).ConfigureAwait(false);
+                }
+            }
+        }
+
         IReadOnlyList<BaseItem> songs = await Search.SearchWithAsrFallbackAsync(songQuery,
             searchTerm =>
             {

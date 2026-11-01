@@ -42,10 +42,50 @@ public class PlayFavoritesIntentHandler : BaseHandler
         PluginConfiguration config,
         ILibraryManager libraryManager,
         IUserManager userManager,
-        ILoggerFactory loggerFactory) : base(sessionManager, config, loggerFactory)
+        ILoggerFactory loggerFactory,
+        IUserDataManager? userDataManager = null,
+        IArtistIndex? artistIndex = null,
+        Playback.DeviceQueueManager? queueManager = null) : base(sessionManager, config, loggerFactory)
     {
         _libraryManager = libraryManager;
         _userManager = userManager;
+        _userDataManager = userDataManager;
+        _artistIndex = artistIndex;
+        _queueManager = queueManager;
+    }
+
+    private readonly IUserDataManager? _userDataManager;
+    private readonly IArtistIndex? _artistIndex;
+    private readonly Playback.DeviceQueueManager? _queueManager;
+
+    /// <summary>
+    /// Plays the songs of the artist a "favorites of {name}" request actually named, when
+    /// the library has such an artist; null when it has none (the caller speaks the
+    /// user-not-found line).
+    /// </summary>
+    private async Task<SkillResponse?> TryPlayArtistNamedAsync(string name, Entities.User user, SessionInfo session, Context context, string locale, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<BaseItem> artists = await Util.ArtistSearch.SearchAsync(
+            name, user, _libraryManager, _artistIndex, Logger,
+            (q, ct) => RetryHelper.ExecuteWithRequestBudgetAsync(
+                () => _libraryManager.GetItemList(q), Logger, "GetArtists", cancellationToken: ct),
+            locale, cancellationToken).ConfigureAwait(false);
+        if (artists.Count == 0)
+        {
+            return null;
+        }
+
+        JellyfinUser? requester = _userManager.GetUserById(session.UserId);
+        if (requester == null)
+        {
+            return null;
+        }
+
+        Logger.LogInformation("PlayFavorites: no user named '{Name}'; playing the artist of that name instead ('{Artist}')", name, artists[0].Name);
+        return await CrossMedia.BuildArtistSongsResponseAsync(
+            artists[0].Id, artists[0].Name, requester, user, session, context, locale,
+            _libraryManager, _userDataManager!, _queueManager, "PlayFavorites artist fallback",
+            cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -80,6 +120,15 @@ public class PlayFavoritesIntentHandler : BaseHandler
             jellyfinUser = ResolveUserByName(usernameSlot);
             if (jellyfinUser == null)
             {
+                // "mets les chansons de M83": when the artist is not matched by the
+                // JellyfinArtist catalog, Alexa lands the sentence here and the artist name
+                // fills the free-text username slot (device-observed). Nobody of that name
+                // exists, so before the "no such user" answer, try the name as an artist.
+                if (_userDataManager != null && await TryPlayArtistNamedAsync(usernameSlot, user, session, context, locale, cancellationToken).ConfigureAwait(false) is { } artistResponse)
+                {
+                    return artistResponse;
+                }
+
                 return ResponseBuilder.Tell(ResponseStrings.Get("UserByNameNotFound", locale, usernameSlot));
             }
 
