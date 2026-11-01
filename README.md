@@ -10,8 +10,9 @@ Play music, videos, playlists, search your library, manage favorites, and more â
 
 <br/>
 
-[![CI](https://github.com/paoloantinori/jellyfin-alexa-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/paoloantinori/jellyfin-alexa-plugin/actions/workflows/ci.yml)
-[![GitHub all releases](https://img.shields.io/github/downloads/paoloantinori/jellyfin-alexa-plugin/total?label=total%20downloads)](https://github.com/paoloantinori/jellyfin-alexa-plugin/releases)
+[![CI](https://github.com/Tergin87/jellyfin-alexa-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/Tergin87/jellyfin-alexa-plugin/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/Tergin87/jellyfin-alexa-plugin?label=release)](https://github.com/Tergin87/jellyfin-alexa-plugin/releases/latest)
+[![GitHub all releases](https://img.shields.io/github/downloads/Tergin87/jellyfin-alexa-plugin/total?label=total%20downloads)](https://github.com/Tergin87/jellyfin-alexa-plugin/releases)
 [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 [![built: AI-assisted, human-owned](docs/badges/ai-assisted.svg)](#how-this-project-is-built)
 
@@ -25,11 +26,11 @@ Play music, videos, playlists, search your library, manage favorites, and more â
 
 <br/>
 
-<i>Fork of the <a href="https://github.com/infinityofspace/jellyfin-alexa-plugin">original project by infinityofspace</a>, with additional features and bug fixes.</i>
+<i>Fork of <a href="https://github.com/paoloantinori/jellyfin-alexa-plugin">Paolo Antinori's plugin</a> (itself a fork of the <a href="https://github.com/infinityofspace/jellyfin-alexa-plugin">original project by infinityofspace</a>), adding native support for <b>Sonos speakers with Alexa built in</b> and better recognition of artist names with numbers (U2, M83).</i>
 
 <br/>
 
-_Now at version 1.0: works on both Jellyfin 10.11 and Jellyfin 12. Back up your configuration before major updates._
+_Version 1.1: works on both Jellyfin 10.11 and Jellyfin 12, and on Sonos speakers with Alexa built in. Back up your configuration before major updates._
 
 </div>
 
@@ -42,7 +43,7 @@ _Now at version 1.0: works on both Jellyfin 10.11 and Jellyfin 12. Back up your 
 <td width="50%">
 
 ### ðŸŽµ Music & Audio
-Play songs, albums, artists, audiobooks, podcasts, and playlists. Conversational song search with multi-turn dialog. Phonetic matching for accented speech. AutoPlay radio mode when the queue ends. Reliable loop and shuffle controls that confirm out loud.
+Play songs, albums, artists, audiobooks, podcasts, and playlists. Conversational song search with multi-turn dialog. Phonetic matching for accented speech. AutoPlay radio mode when the queue ends. Reliable loop and shuffle controls that confirm out loud. **Sonos speakers with Alexa built in** play through their own queue: gapless chaining, native pause/next/previous, playback reported to Jellyfin.
 
 </td>
 <td width="50%">
@@ -198,7 +199,7 @@ Before you begin, you need:
 
 ### Option 2: Manual Installation
 
-1. Download the latest release from the [releases page](https://github.com/paoloantinori/jellyfin-alexa-plugin/releases)
+1. Download the latest release from the [releases page](https://github.com/Tergin87/jellyfin-alexa-plugin/releases) (`AlexaSkill_<version>.net10.zip` for Jellyfin 12.x, `AlexaSkill_<version>.zip` for Jellyfin 10.11.x)
 2. Extract the ZIP file
 3. Create a folder named `Jellyfin.Plugin.AlexaSkill` inside your Jellyfin server's `plugins` directory
 4. Copy the extracted files into that folder
@@ -207,7 +208,7 @@ Before you begin, you need:
 ### Option 3: Build from Source
 
 ```bash
-git clone https://github.com/paoloantinori/jellyfin-alexa-plugin.git
+git clone https://github.com/Tergin87/jellyfin-alexa-plugin.git
 cd jellyfin-alexa-plugin
 git checkout <version>      # use the latest release tag
 dotnet publish --configuration Release
