@@ -594,7 +594,6 @@ public class AlexaSkillController : ControllerBase
 
         var serverRoot = new Uri(config.ServerAddress);
         var tracks = new List<SonosTrack>();
-        string? albumName = null;
         foreach (string id in SonosCastRouting.PlayOrder(_queueManager?.GetQueue(deviceId), launchItemId.ToString()))
         {
             if (!Guid.TryParse(id, out Guid itemGuid) || _libraryManager.GetItemById(itemGuid) is not MediaBrowser.Controller.Entities.BaseItem item)
@@ -602,7 +601,6 @@ public class AlexaSkillController : ControllerBase
                 continue;
             }
 
-            albumName ??= (item as MediaBrowser.Controller.Entities.Audio.Audio)?.Album;
             tracks.Add(ToSonosTrack(item, serverRoot, user.JellyfinToken!));
         }
 
@@ -641,8 +639,9 @@ public class AlexaSkillController : ControllerBase
             return false;
         }
 
-        string spoken = tracks.Count > 1 && !string.IsNullOrWhiteSpace(albumName) ? albumName : tracks[0].Title;
-        SonosCastRouting.ToCastConfirmation(skillResponse, ResponseStrings.Get("SonosCastStarted", BaseHandler.GetLocalePublic(request), spoken));
+        // Silent, like a native play on an Echo: the music starting is the confirmation. Any
+        // speech the handler attached (an artist substitution, a warning) is kept.
+        SonosCastRouting.ToCastConfirmation(skillResponse, speech: null);
 
         await StartSonosMonitorAsync(config.SonosCastHost, deviceId, user).ConfigureAwait(false);
         return true;

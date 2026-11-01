@@ -57,12 +57,16 @@ public static class SonosCastRouting
     /// </summary>
     /// <param name="response">The handler's response (mutated).</param>
     /// <param name="speech">The confirmation line.</param>
-    public static void ToCastConfirmation(SkillResponse response, string speech)
+    public static void ToCastConfirmation(SkillResponse response, string? speech)
     {
         ArgumentNullException.ThrowIfNull(response);
         response.Response ??= new ResponseBody();
         response.Response.Directives?.Clear();
-        response.Response.OutputSpeech = new PlainTextOutputSpeech { Text = speech };
+        if (speech != null)
+        {
+            response.Response.OutputSpeech = new PlainTextOutputSpeech { Text = speech };
+        }
+
         response.Response.Reprompt = null;
         response.Response.ShouldEndSession = true;
         response.SessionAttributes = null;
