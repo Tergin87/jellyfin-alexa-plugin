@@ -290,7 +290,7 @@ The configuration page has two sections: global settings at the top (server addr
 3. Select the Jellyfin user from the dropdown
 4. **Save** to create the skill (a new user only persists the invocation name at first).
 5. Click a row (or its chevron) to **expand** it and reveal the per-user settings grouped into three panels:
-   **Invocation & Libraries**: the invocation name (leave **empty** for locale defaults: Italian "Mia Collezione", German "Meine Sammlung", Spanish "Mi Colección", French "Mon Serveur", Portuguese "Minha Coleção", Dutch "Mijn Collectie"; English and the remaining locales use "Jellyfin Player". You can also enter a custom two-or-more-word name that applies to **all** locales) plus the allowed-libraries picker. Saving a changed invocation name redeploys it to Amazon automatically (~15–30s); use **Reset** to return to locale defaults. To see the live name for a locale, check the skill's Invocations page in the Amazon developer console.
+   **Invocation & Libraries**: the invocation name (leave **empty** for locale defaults: Italian "Mia Collezione", German "Meine Sammlung", Spanish "Mi Colección", French "Mon Serveur", Portuguese "Minha Coleção", Dutch "Mijn Collectie"; English and the remaining locales use "Jellyfin Player". You can also enter a custom name that applies to **all** locales; a one-word name such as "jellyfin" works in the development stage your self-hosted skill runs in, Amazon only requires two or more words for certification) plus the allowed-libraries picker. Saving a changed invocation name redeploys it to Amazon automatically (~15–30s); use **Reset** to return to locale defaults. To see the live name for a locale, check the skill's Invocations page in the Amazon developer console.
    - **Search**: fuzzy match behavior, thresholds, and search response mode.
    - **Playback**: PostPlay behavior, music delivery (seek bar vs. raw stream), and announcement options.
 
@@ -307,6 +307,24 @@ The plugin uploads your Jellyfin library (artists and albums) to Amazon's catalo
 Toggle individual features on or off from the configuration page: radio mode, podcasts, mood music, sleep timer, chapter navigation, recommendations, artist library queries, voice profile recognition, resume offer, and ASR compound-word correction.
 
 **Podcasts**: Jellyfin has no dedicated podcast type, so podcasts must be stored as albums in your Music library (one album per podcast show, one audio track per episode). The skill plays the latest episode by name.
+
+**Resume Albums Where You Left Off**: on by default, "play album X" starts at the first track you have not finished yet. Turn it off to always start an album at track 1 with the whole album queued.
+
+### Sonos speakers (Alexa built-in)
+
+Sonos speakers with Alexa built in (tested on a Sonos Era 100) accept the skill's first track but ignore the "enqueue next track" instruction Alexa uses to chain an album, so playback stopped after every track. Amazon also rejects the only fallback a skill could send, so this cannot be fixed on the Alexa side. Instead, the plugin can hand the music to the speaker's **own queue** over your local network:
+
+1. Give the speaker a fixed IP address on your router and enter it in **Sonos speaker address**.
+2. Say anything to the skill from the speaker, reload the plugin page, and click **Use as Sonos** next to the speaker in the device list under the Sonos fields (speakers the plugin has already recognised are cast automatically). **Save**.
+
+From then on, every "play album / artist / playlist / song" spoken to that speaker fills its Sonos queue (first track plays within a second, the rest is appended in the background) and Alexa only confirms ("Playing *album* on the Sonos"). What you get:
+
+- Tracks chain natively, gapless, with titles and cover art on the speaker's now-playing screen.
+- "Alexa, pause / resume / next / previous" control the Sonos queue natively, and resume at the right position.
+- Commands addressed to the skill work too: "ask Jellyfin to stop / skip / start over / shuffle / repeat this song / stop repeating", "ask Jellyfin what's playing", "ask Jellyfin to play *song* next" (inserted right after the current track) and "add *song* to the queue".
+- Playback is reported to Jellyfin as it happens (the dashboard, play counts and played flags all work), read from the speaker's own position.
+
+Known limitation: the Sonos app's **Queue** view shows the queued tracks as blank rows (the now-playing screen is complete). This is how the Sonos app treats any source that is not a Sonos music service or its own indexed library; every metadata shape was tried against the speaker and none changes it. Echo devices are unaffected by this feature: only the speaker you selected is cast.
 
 ### Custom Interaction Model
 
