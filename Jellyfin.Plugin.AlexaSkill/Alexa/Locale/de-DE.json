@@ -324,6 +324,5 @@
   "NoPhotosFound": "Ich konnte keine Fotos in deiner Mediathek finden.",
   "ShowingPhotoAlbum": "Ich zeige {0} Fotos aus {1}.",
   "ShowingRecentPhotos": "Ich zeige deine {0} neuesten Fotos.",
-  "RecentPhotosTitle": "Neueste Fotos",
-  "SonosCastStarted": "{0} wird auf dem Sonos abgespielt."
+  "RecentPhotosTitle": "Neueste Fotos"
 }

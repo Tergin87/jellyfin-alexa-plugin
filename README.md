@@ -318,7 +318,7 @@ Sonos speakers with Alexa built in (tested on a Sonos Era 100) accept the skill'
 1. Give the speaker a fixed IP address on your router and enter it in **Sonos speaker address**.
 2. Say anything to the skill from the speaker, reload the plugin page, and click **Use as Sonos** next to the speaker in the device list under the Sonos fields (speakers the plugin has already recognised are cast automatically). **Save**.
 
-From then on, every "play album / artist / playlist / song" spoken to that speaker fills its Sonos queue (first track plays within a second, the rest is appended in the background) and Alexa only confirms ("Playing *album* on the Sonos"). What you get:
+From then on, every "play album / artist / playlist / song" spoken to that speaker fills its Sonos queue (first track plays within a second, the rest is appended in the background), silently, exactly like a native play on an Echo. What you get:
 
 - Tracks chain natively, gapless, with titles and cover art on the speaker's now-playing screen.
 - "Alexa, pause / resume / next / previous" control the Sonos queue natively, and resume at the right position.

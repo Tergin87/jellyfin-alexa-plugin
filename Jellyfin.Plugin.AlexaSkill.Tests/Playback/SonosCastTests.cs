@@ -68,6 +68,21 @@ public class SonosCastTests
     }
 
     [Fact]
+    public void ToCastConfirmation_WithoutSpeech_IsSilentButKeepsTheHandlersOwnSpeech()
+    {
+        var silent = ResponseBuilder.AudioPlayerPlay(PlayBehavior.ReplaceAll, "https://jf/first", "first", 0);
+        SonosCastRouting.ToCastConfirmation(silent, speech: null);
+        Assert.Empty(silent.Response.Directives);
+        Assert.Null(silent.Response.OutputSpeech);
+        Assert.True(silent.Response.ShouldEndSession);
+
+        var announced = ResponseBuilder.AudioPlayerPlay(PlayBehavior.ReplaceAll, "https://jf/first", "first", 0);
+        announced.Response.OutputSpeech = new PlainTextOutputSpeech { Text = "Je joue U2 à la place." };
+        SonosCastRouting.ToCastConfirmation(announced, speech: null);
+        Assert.Equal("Je joue U2 à la place.", ((PlainTextOutputSpeech)announced.Response.OutputSpeech).Text);
+    }
+
+    [Fact]
     public void PlayOrder_StartsAtLaunchItemAndFollowsQueue()
     {
         var queue = new DeviceQueue { ItemIds = new List<string> { "a", "b", "c", "d" }, CurrentIndex = 1 };
