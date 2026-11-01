@@ -706,7 +706,7 @@ Invocation name: **"jellyfin player"**
 | In Progress Media List | `qu'est-ce que j'écoute` · `qu'est-ce que je regarde` · `quoi en cours` · `afficher ma progression` · `qu'ai-je commencé` |
 | Learn My Voice | `Apprends ma voix` · `Reconnais ma voix` · `Lie ma voix` · `C'est ma voix` · `Reconnais-moi` · `Configure mon profil vocal` |
 | List Queue | `Qu'est-ce qu'il y a dans ma file d'attente` · `Qu'est-ce qu'il y a dans la file d'attente` · `Qu'est-ce qui vient après` · `Qu'est-ce qui suit` · `Affiche ma file d'attente` · `Liste ma file d'attente` |
-| Loop All Off | `Désactive la boucle` · `Désactive la répétition` |
+| Loop All Off | `Désactive la boucle` · `Désactive la répétition` · `Arrête la répétition` · `Arrête la boucle` · `Enlève la répétition` · `Ne répète plus` |
 | Loop All On | `Répète la file d'attente` · `Répète toute la file d'attente` · `Mets la file d'attente en boucle` · `De répéter la file d'attente` · `De répéter toute la file d'attente` |
 | Loop Song On | `Répète cette chanson` · `Répète ce morceau` · `Mets cette chanson en boucle` · `Loop cette chanson` · `Répète indéfiniment` · `Active la boucle` |
 | Mark Favorite | `J'aime bien` · `J'aime cette vidéo` · `J'aime cette chanson` · `J'aime cette musique` · `Ajoute la vidéo aux favoris` · `Ajoute la chanson aux favoris` |
@@ -740,8 +740,8 @@ Invocation name: **"jellyfin player"**
 | Set Reminder | `rappelle-moi dans {reminder_duration}` · `rappelle-moi à {reminder_time}` · `mets un rappel de {reminder_duration}` · `crée un rappel pour {reminder_time}` |
 | Show More | `montre plus` · `encore` · `plus de résultats` · `continuer` · `suivant` · `quoi d'autre` |
 | Show Photo Album | `montre mes photos` · `montre les photos de {photoAlbum}` · `montre-moi mes photos` · `montre-moi les photos de {photoAlbum}` · `affiche les photos de {photoAlbum}` · `ouvre les photos de {photoAlbum}` |
-| Shuffle All Off | `désactive la lecture aléatoire` · `arrête la lecture aléatoire` |
-| Shuffle All On | `active la lecture aléatoire` · `mélange la file d'attente` · `mets en lecture aléatoire` · `lecture aléatoire` |
+| Shuffle All Off | `désactive la lecture aléatoire` · `arrête la lecture aléatoire` · `désactive le mode aléatoire` · `arrête le mode aléatoire` · `enlève la lecture aléatoire` · `remets la lecture dans l'ordre` |
+| Shuffle All On | `active la lecture aléatoire` · `mélange la file d'attente` · `mets en lecture aléatoire` · `lecture aléatoire` · `mets le mode aléatoire` · `active le mode aléatoire` |
 | Shuffle Play | `lis la playlist {playlist} en mode aléatoire` · `mélange la playlist {playlist}` · `mets la playlist {playlist} en mode aléatoire` |
 | Skip Forward Back | `saute {seek_direction}` · `saute {seek_direction} de {seek_amount} {seek_unit}` · `{seek_direction} de {seek_amount} {seek_unit}` · `sauter {seek_direction}` · `sauter {seek_direction} de {seek_amount} {seek_unit}` · `de sauter {seek_direction}` |
 | Sleep Timer | `arrêter dans {sleep_duration}` · `minuterie {sleep_duration}` · `arrêter après {sleep_duration}` · `éteindre dans {sleep_duration}` |
