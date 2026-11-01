@@ -371,6 +371,15 @@ public class AlexaSkillController : ControllerBase
             string deviceId = req.Context.System.Device?.DeviceID ?? "unknown";
             string requestType = req.Request?.Type ?? "unknown";
 
+            // The config page lists the devices seen here so the Sonos speaker can be
+            // picked by a click instead of its id being copied from the log.
+            RecentAlexaDevices.Record(
+                req.Context.System.Device?.DeviceID,
+                req.Request is IntentRequest seenIntent ? seenIntent.Intent?.Name ?? requestType : requestType,
+                req.Context.System.Device?.SupportedInterfaces != null
+                    && (req.Context.System.Device.SupportedInterfaces.ContainsKey("Display") || req.Context.System.Device.SupportedInterfaces.ContainsKey("Alexa.Presentation.APL")),
+                ownerDeviceId != null);
+
             _counters.IncrementRequests();
             _counters.IncrementType(requestType);
 

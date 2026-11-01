@@ -124,6 +124,28 @@ public class SonosCastTests
     }
 
     [Fact]
+    public void RecentAlexaDevices_RecordsLatestStateAndStickyFlags()
+    {
+        RecentAlexaDevices.Clear();
+        var t0 = new DateTime(2026, 11, 1, 10, 0, 0, DateTimeKind.Utc);
+
+        RecentAlexaDevices.Record("amzn1.ask.device.A", "PlayAlbumIntent", hasDisplay: false, splitEndpointLearned: false, t0);
+        RecentAlexaDevices.Record("amzn1.ask.device.A", "AudioPlayer.PlaybackStarted", hasDisplay: false, splitEndpointLearned: true, t0.AddSeconds(3));
+        RecentAlexaDevices.Record("amzn1.ask.device.B", "LaunchRequest", hasDisplay: true, splitEndpointLearned: false, t0.AddSeconds(1));
+        RecentAlexaDevices.Record(null, "ignored", false, false, t0);
+
+        var snapshot = RecentAlexaDevices.Snapshot();
+        Assert.Equal(2, snapshot.Count);
+        Assert.Equal("amzn1.ask.device.A", snapshot[0].DeviceId);
+        Assert.Equal("AudioPlayer.PlaybackStarted", snapshot[0].LastRequest);
+        Assert.Equal(t0, snapshot[0].FirstSeenUtc);
+        Assert.True(snapshot[0].SplitEndpointLearned);
+        Assert.False(snapshot[0].HasDisplay);
+        Assert.True(snapshot[1].HasDisplay);
+        RecentAlexaDevices.Clear();
+    }
+
+    [Fact]
     public void IsQueueIntent_RecognisesTheTwoQueueIntents()
     {
         Assert.True(SonosCastRouting.IsQueueIntent("AddToQueueIntent", out bool asNext));

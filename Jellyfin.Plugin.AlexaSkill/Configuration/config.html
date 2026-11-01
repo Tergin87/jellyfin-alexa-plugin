@@ -252,7 +252,8 @@
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="SonosCastDeviceIds">Sonos Alexa device ids (optional)</label>
                                 <input id="SonosCastDeviceIds" name="SonosCastDeviceIds" type="text" is="emby-input" />
-                                <div class="fieldDescription">Comma-separated Alexa device ids (amzn1.ask.device....) whose requests are cast to the speaker above. Speakers already recognised as split-endpoint devices are cast automatically; use this when the speaker has never streamed through Alexa yet. The id appears in the Jellyfin log line "Processing Alexa request" scope (DeviceId).</div>
+                                <div class="fieldDescription">Comma-separated Alexa device ids (amzn1.ask.device....) whose requests are cast to the speaker above. Speakers already recognised as split-endpoint devices are cast automatically; use this when the speaker has never streamed through Alexa yet. Pick it from the list below (say anything to the skill from the speaker first, then reload this page), or copy it from the Jellyfin log.</div>
+                                <div id="recentDevicesList" style="margin-top:0.5em;"></div>
                             </div>
                             <div class="checkboxContainer checkboxContainer-withDescription">
                                 <label><input type="checkbox" is="emby-checkbox" id="ShuffleArtistSongs" /> <span>Shuffle Artist Songs</span></label>
@@ -575,6 +576,7 @@
                     document.querySelector("#AlbumResumeEnabled").checked = config.AlbumResumeEnabled !== false;
                     document.querySelector("#SonosCastHost").value = config.SonosCastHost || "";
                     document.querySelector("#SonosCastDeviceIds").value = config.SonosCastDeviceIds || "";
+                    loadRecentDevices();
 
                     // Playback preferences
                     document.querySelector("#InitialFetchSize").value = config.InitialFetchSize != null ? config.InitialFetchSize : 5;
@@ -2008,6 +2010,65 @@
                     showAddUserMode("Fallback");
                 });
             });
+
+            // Sonos cast: the Alexa devices seen since the server started, each with a
+            // "Use as Sonos" button that appends its id to the SonosCastDeviceIds field
+            // (the page's Save button persists it). Layout-critical styles are inline
+            // (JF-365: the <style> block is unreliable under the dashboard's view injection).
+            function loadRecentDevices() {
+                var host = document.querySelector("#recentDevicesList");
+                if (!host) { return; }
+                ApiClient.ajax({
+                    type: "GET",
+                    url: ApiClient.getUrl("alexaskill/api/recent-devices")
+                }).then(function (res) {
+                    return res.json();
+                }).then(function (devices) {
+                    host.innerHTML = "";
+                    if (!devices || devices.length === 0) {
+                        host.textContent = "No Alexa device has talked to the skill since the server started.";
+                        host.style.cssText = "margin-top:0.5em;color:#aaa;font-size:0.9em;";
+                        return;
+                    }
+                    var title = document.createElement("div");
+                    title.textContent = "Devices seen since the server started:";
+                    title.style.cssText = "color:#aaa;font-size:0.9em;margin-bottom:0.3em;";
+                    host.appendChild(title);
+                    devices.forEach(function (d) {
+                        var row = document.createElement("div");
+                        row.style.cssText = "display:flex;align-items:center;gap:0.6em;margin-bottom:0.25em;font-size:0.9em;";
+                        var idSpan = document.createElement("span");
+                        idSpan.textContent = d.deviceId.slice(0, 28) + "…" + d.deviceId.slice(-6);
+                        idSpan.title = d.deviceId;
+                        idSpan.style.cssText = "font-family:monospace;color:#ccc;";
+                        var info = document.createElement("span");
+                        var kind = d.hasDisplay ? "screen" : (d.splitEndpointLearned ? "split-endpoint speaker" : "speaker");
+                        info.textContent = kind + ", last: " + d.lastRequest + " at " + new Date(d.lastSeenUtc).toLocaleTimeString() + (d.sonosCast ? ", cast to Sonos" : "");
+                        info.style.cssText = "color:" + (d.sonosCast ? "#4caf50" : "#aaa") + ";";
+                        row.appendChild(idSpan);
+                        row.appendChild(info);
+                        if (!d.sonosCast) {
+                            var btn = document.createElement("button");
+                            btn.type = "button";
+                            btn.textContent = "Use as Sonos";
+                            btn.className = "raised button-submit";
+                            btn.style.cssText = "padding:0.2em 0.6em;font-size:0.85em;";
+                            btn.addEventListener("click", function () {
+                                var field = document.querySelector("#SonosCastDeviceIds");
+                                var ids = field.value.split(",").map(function (s) { return s.trim(); }).filter(function (s) { return s.length > 0; });
+                                if (ids.indexOf(d.deviceId) < 0) { ids.push(d.deviceId); }
+                                field.value = ids.join(", ");
+                                info.textContent += " (added, click Save)";
+                                btn.remove();
+                            });
+                            row.appendChild(btn);
+                        }
+                        host.appendChild(row);
+                    });
+                }).catch(function () {
+                    host.textContent = "";
+                });
+            }
 
             function loadCustomModelStatus() {
                 ApiClient.ajax({

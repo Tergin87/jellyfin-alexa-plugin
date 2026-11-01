@@ -1031,6 +1031,29 @@ public class ConfigurationController : ControllerBase
     /// Gets the current custom model deployment configuration and status.
     /// </summary>
     /// <returns>A JSON object with the custom model config values.</returns>
+    /// <summary>
+    /// The Alexa devices seen since the server started (most recent first), with whether
+    /// each one is currently cast to the Sonos speaker. Backs the device picker next to
+    /// the Sonos fields on the config page.
+    /// </summary>
+    /// <returns>The device list.</returns>
+    [HttpGet("recent-devices")]
+    [Authorize(Policy = "RequiresElevation")]
+    public ActionResult GetRecentDevices()
+    {
+        PluginConfiguration config = Plugin.Instance!.Configuration;
+        return new JsonResult(Alexa.Playback.RecentAlexaDevices.Snapshot().Select(d => new
+        {
+            deviceId = d.DeviceId,
+            firstSeenUtc = d.FirstSeenUtc,
+            lastSeenUtc = d.LastSeenUtc,
+            lastRequest = d.LastRequest,
+            hasDisplay = d.HasDisplay,
+            splitEndpointLearned = d.SplitEndpointLearned,
+            sonosCast = Alexa.Playback.SonosCastRouting.ShouldCast(config, d.DeviceId),
+        }).ToList());
+    }
+
     [HttpGet("custom-model/status")]
     [Authorize(Policy = "RequiresElevation")]
     public ActionResult GetCustomModelStatus()
