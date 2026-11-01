@@ -3,9 +3,9 @@
         "category": "General",
         "guid": "c5df7de0-8777-4b3c-a70d-5c3dae359c9e",
         "name": "AlexaSkill",
-        "description": "Alexa skill plugin for Jellyfin, based on work by infinityofspace",
-        "owner": "Paolo Antinori",
-        "overview": "Alexa skill plugin for Jellyfin",
+        "description": "Alexa skill plugin for Jellyfin: voice playback, search and library management, including Sonos speakers with Alexa built in. Fork of Paolo Antinori\u2019s plugin, itself based on work by infinityofspace.",
+        "owner": "Tergin87",
+        "overview": "Alexa skill plugin for Jellyfin, with Sonos support",
         "imageUrl": "https://raw.githubusercontent.com/Tergin87/jellyfin-alexa-plugin/main/Jellyfin.Plugin.AlexaSkill/icon.jpg",
         "versions": [
             {
