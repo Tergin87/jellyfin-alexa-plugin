@@ -191,7 +191,7 @@ Before you begin, you need:
 2. Go to **Plugins** and select the **Repositories** tab
 3. Add a new repository with this URL (name can be anything):
    ```
-   https://raw.githubusercontent.com/paoloantinori/jellyfin-alexa-plugin/main/manifest.json
+   https://raw.githubusercontent.com/Tergin87/jellyfin-alexa-plugin/main/manifest.json
    ```
 4. Go to the **Catalog** tab and find **AlexaSkill** under the **General** category
 5. Install the plugin and restart your Jellyfin server

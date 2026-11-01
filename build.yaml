@@ -1,7 +1,7 @@
 ---
 name: Alexa Skill
 guid: c5df7de0-8777-4b3c-a70d-5c3dae359c9e
-version: 1.1.0.0
+version: 1.1.0.1
 targetAbi: 10.11.0.0
 framework: net9.0
 overview: Alexa skill plugin for Jellyfin
@@ -20,4 +20,4 @@ artifacts:
   - Amazon.Lambda.Serialization.Json.dll
   - Jellyfin.Plugin.AlexaSkill.dll
   - Refit.dll
-changelog: "Sonos speakers with Alexa built in (tested on the Sonos Era 100) can now play albums, artists, playlists and songs through the speaker's own queue instead of Alexa's player, which stopped after every track on these devices: set the speaker's IP address in the plugin settings and pick the speaker in the device list. Tracks chain natively, pause/resume/next/previous work by voice, commands addressed to the skill (stop, skip, start over, shuffle, repeat, what's playing, play next, add to queue) drive the speaker, and playback is reported to Jellyfin as it happens. Also fixes the Sonos device-id split that lost the queue after the first track, adds an option to always start albums at track 1 instead of resuming, allows one-word invocation names, and adds more natural French phrasings for queue, repeat, shuffle and what's-playing commands. Known limitation: the Sonos app's queue view shows the queued tracks as blank rows."
+changelog: "Sonos speakers with Alexa built in (tested on the Sonos Era 100) can now play albums, artists, playlists and songs through the speaker's own queue instead of Alexa's player, which stopped after every track on these devices: set the speaker's IP address in the plugin settings and pick the speaker in the device list. Tracks chain natively, pause/resume/next/previous work by voice, commands addressed to the skill (stop, skip, start over, shuffle, repeat, what's playing, play next, add to queue) drive the speaker, and playback is reported to Jellyfin as it happens. Also fixes the Sonos device-id split that lost the queue after the first track, adds an option to always start albums at track 1 instead of resuming, allows one-word invocation names, and adds more natural French phrasings for queue, repeat, shuffle and what's-playing commands. Known limitation: the Sonos app's queue view shows the queued tracks as blank rows. Artist names containing numbers (U2, M83, Blink-182, Maroon 5...) are now recognized when Alexa writes the number in words or spells the letters ("u. two", "m quatre-vingt-trois"), both in the search and in the catalog synonyms sent to Amazon; "play the music of X" and "play X's songs" land on the artist even when Alexa misroutes them to a song or user request."
