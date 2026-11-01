@@ -60,21 +60,40 @@
           "active la lecture aléatoire",
           "mélange la file d'attente",
           "mets en lecture aléatoire",
-          "lecture aléatoire"
+          "lecture aléatoire",
+          "mets le mode aléatoire",
+          "active le mode aléatoire",
+          "mélange les chansons",
+          "de mélanger la file d'attente",
+          "d'activer la lecture aléatoire"
         ]
       },
       {
         "name": "ShuffleAllOffIntent",
         "samples": [
           "désactive la lecture aléatoire",
-          "arrête la lecture aléatoire"
+          "arrête la lecture aléatoire",
+          "désactive le mode aléatoire",
+          "arrête le mode aléatoire",
+          "enlève la lecture aléatoire",
+          "remets la lecture dans l'ordre",
+          "de désactiver la lecture aléatoire",
+          "d'arrêter la lecture aléatoire"
         ]
       },
       {
         "name": "LoopAllOffIntent",
         "samples": [
           "Désactive la boucle",
-          "Désactive la répétition"
+          "Désactive la répétition",
+          "Arrête la répétition",
+          "Arrête la boucle",
+          "Enlève la répétition",
+          "Ne répète plus",
+          "Arrête de répéter",
+          "D'arrêter la répétition",
+          "D'arrêter la boucle",
+          "De désactiver la répétition"
         ]
       },
       {
@@ -531,6 +550,16 @@
           "Quelle {media_info_type} est-ce",
           "Qu'est-ce qui joue",
           "Qu'est-ce qui est en cours",
+          "Qu'est-ce qu'on écoute",
+          "C'est quoi cette chanson",
+          "C'est quoi ce titre",
+          "C'est quoi cette musique",
+          "C'est quoi qui joue",
+          "Quel est ce morceau",
+          "Quel est ce titre",
+          "Qui est-ce qui chante",
+          "Dis-moi ce qui joue",
+          "Qu'est-ce que tu joues",
           "Quelle est cette chanson",
           "Qui chante",
           "Qui chante cette chanson",
@@ -829,7 +858,15 @@
           "Mets {song} dans la file d'attente",
           "Mets {song} de {musician} dans la file d'attente",
           "Ajoute {song} à ma liste",
-          "Ajoute {song} de {musician} à ma liste"
+          "Ajoute {song} de {musician} à ma liste",
+          "Ajoute {song} à la file",
+          "Ajoute {song} de {musician} à la file",
+          "Ajoute {song} à la suite",
+          "Ajoute {song} de {musician} à la suite",
+          "Rajoute {song} à la file d'attente",
+          "Mets {song} en fin de file d'attente",
+          "D'ajouter {song} à la file d'attente",
+          "D'ajouter {song} de {musician} à la file d'attente"
         ]
       },
       {
@@ -850,7 +887,17 @@
           "Lis {song} après",
           "Lis {song} de {musician} après",
           "Je veux entendre {song} ensuite",
-          "Passe {song} ensuite"
+          "Passe {song} ensuite",
+          "Joue {song} ensuite",
+          "Joue {song} de {musician} ensuite",
+          "Mets {song} ensuite",
+          "Mets {song} de {musician} ensuite",
+          "Joue {song} juste après",
+          "Enchaîne avec {song}",
+          "Enchaîne avec {song} de {musician}",
+          "De jouer {song} ensuite",
+          "De jouer {song} de {musician} ensuite",
+          "De mettre {song} ensuite"
         ]
       },
       {
@@ -1027,7 +1074,15 @@
           "Loop cette chanson",
           "Répète indéfiniment",
           "Active la boucle",
-          "Active la répétition"
+          "Active la répétition",
+          "Répète ce titre",
+          "Répète le titre",
+          "Répète la chanson",
+          "Mets ce titre en boucle",
+          "Boucle sur ce titre",
+          "De répéter ce titre",
+          "De répéter cette chanson",
+          "De répéter ce morceau"
         ]
       },
       {

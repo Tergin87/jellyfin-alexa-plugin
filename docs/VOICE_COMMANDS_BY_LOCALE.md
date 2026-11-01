@@ -6243,7 +6243,7 @@ Placeholder legend:
 | `<mots du titre de la chanson>` | `{titleKeywords}` |
 | `<nom d'utilisateur>` | `{username}` |
 
-Complete phrase list (492 phrases across 73 commands):
+Complete phrase list (547 phrases across 73 commands):
 
 #### Play music
 
@@ -6606,6 +6606,14 @@ Complete phrase list (492 phrases across 73 commands):
 - `Mets <titre de la chanson> de <nom de l'artiste> dans la file d'attente`
 - `Ajoute <titre de la chanson> à ma liste`
 - `Ajoute <titre de la chanson> de <nom de l'artiste> à ma liste`
+- `Ajoute <titre de la chanson> à la file`
+- `Ajoute <titre de la chanson> de <nom de l'artiste> à la file`
+- `Ajoute <titre de la chanson> à la suite`
+- `Ajoute <titre de la chanson> de <nom de l'artiste> à la suite`
+- `Rajoute <titre de la chanson> à la file d'attente`
+- `Mets <titre de la chanson> en fin de file d'attente`
+- `D'ajouter <titre de la chanson> à la file d'attente`
+- `D'ajouter <titre de la chanson> de <nom de l'artiste> à la file d'attente`
 
 **Play next**
 
@@ -6615,6 +6623,16 @@ Complete phrase list (492 phrases across 73 commands):
 - `Lis <titre de la chanson> de <nom de l'artiste> après`
 - `Je veux entendre <titre de la chanson> ensuite`
 - `Passe <titre de la chanson> ensuite`
+- `Joue <titre de la chanson> ensuite`
+- `Joue <titre de la chanson> de <nom de l'artiste> ensuite`
+- `Mets <titre de la chanson> ensuite`
+- `Mets <titre de la chanson> de <nom de l'artiste> ensuite`
+- `Joue <titre de la chanson> juste après`
+- `Enchaîne avec <titre de la chanson>`
+- `Enchaîne avec <titre de la chanson> de <nom de l'artiste>`
+- `De jouer <titre de la chanson> ensuite`
+- `De jouer <titre de la chanson> de <nom de l'artiste> ensuite`
+- `De mettre <titre de la chanson> ensuite`
 
 **Add the current song to a playlist**
 
@@ -6668,6 +6686,14 @@ Complete phrase list (492 phrases across 73 commands):
 - `Répète indéfiniment`
 - `Active la boucle`
 - `Active la répétition`
+- `Répète ce titre`
+- `Répète le titre`
+- `Répète la chanson`
+- `Mets ce titre en boucle`
+- `Boucle sur ce titre`
+- `De répéter ce titre`
+- `De répéter cette chanson`
+- `De répéter ce morceau`
 
 **Repeat the current track**
 
@@ -6690,16 +6716,35 @@ Complete phrase list (492 phrases across 73 commands):
 - `mélange la file d'attente`
 - `mets en lecture aléatoire`
 - `lecture aléatoire`
+- `mets le mode aléatoire`
+- `active le mode aléatoire`
+- `mélange les chansons`
+- `de mélanger la file d'attente`
+- `d'activer la lecture aléatoire`
 
 **Turn shuffle off**
 
 - `désactive la lecture aléatoire`
 - `arrête la lecture aléatoire`
+- `désactive le mode aléatoire`
+- `arrête le mode aléatoire`
+- `enlève la lecture aléatoire`
+- `remets la lecture dans l'ordre`
+- `de désactiver la lecture aléatoire`
+- `d'arrêter la lecture aléatoire`
 
 **Turn repeat off**
 
 - `Désactive la boucle`
 - `Désactive la répétition`
+- `Arrête la répétition`
+- `Arrête la boucle`
+- `Enlève la répétition`
+- `Ne répète plus`
+- `Arrête de répéter`
+- `D'arrêter la répétition`
+- `D'arrêter la boucle`
+- `De désactiver la répétition`
 
 #### Favorites
 
@@ -6752,6 +6797,16 @@ Complete phrase list (492 phrases across 73 commands):
 - `Quelle <information (titre, artiste, album)> est-ce`
 - `Qu'est-ce qui joue`
 - `Qu'est-ce qui est en cours`
+- `Qu'est-ce qu'on écoute`
+- `C'est quoi cette chanson`
+- `C'est quoi ce titre`
+- `C'est quoi cette musique`
+- `C'est quoi qui joue`
+- `Quel est ce morceau`
+- `Quel est ce titre`
+- `Qui est-ce qui chante`
+- `Dis-moi ce qui joue`
+- `Qu'est-ce que tu joues`
 - `Quelle est cette chanson`
 - `Qui chante`
 - `Qui chante cette chanson`

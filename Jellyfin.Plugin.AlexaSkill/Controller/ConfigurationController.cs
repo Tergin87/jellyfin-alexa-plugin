@@ -572,6 +572,12 @@ public class ConfigurationController : ControllerBase
         if (req.TryGetValue("CatalogSyncLocales", out var catalogSyncToken) && catalogSyncToken.Type == JTokenType.String)
         { config.CatalogSyncLocales = catalogSyncToken.Value<string>() ?? string.Empty; updated = true; }
 
+        if (req.TryGetValue("SonosCastHost", out var sonosHostToken) && sonosHostToken.Type == JTokenType.String)
+        { config.SonosCastHost = (sonosHostToken.Value<string>() ?? string.Empty).Trim(); updated = true; }
+
+        if (req.TryGetValue("SonosCastDeviceIds", out var sonosDevicesToken) && sonosDevicesToken.Type == JTokenType.String)
+        { config.SonosCastDeviceIds = (sonosDevicesToken.Value<string>() ?? string.Empty).Trim(); updated = true; }
+
         if (req.TryGetValue("AsrCompoundWordFixEnabled", out var asrToken) && asrToken.Type == JTokenType.Boolean)
         { config.AsrCompoundWordFixEnabled = asrToken.Value<bool>(); updated = true; }
 
@@ -587,6 +593,9 @@ public class ConfigurationController : ControllerBase
         // JF-482 experiment: pause response keeps the session open (live toggle, no redeploy).
         if (req.TryGetValue("PauseKeepsSession", out var pauseKeepsToken) && pauseKeepsToken.Type == JTokenType.Boolean)
         { config.PauseKeepsSession = pauseKeepsToken.Value<bool>(); updated = true; }
+
+        if (req.TryGetValue("AlbumResumeEnabled", out var albumResumeToken) && albumResumeToken.Type == JTokenType.Boolean)
+        { config.AlbumResumeEnabled = albumResumeToken.Value<bool>(); updated = true; }
 
         if (req.TryGetValue("NativeControlsForAudio", out var nativeControlsToken) && nativeControlsToken.Type == JTokenType.Boolean)
         { config.NativeControlsForAudio = nativeControlsToken.Value<bool>(); updated = true; }
@@ -1022,6 +1031,29 @@ public class ConfigurationController : ControllerBase
     /// Gets the current custom model deployment configuration and status.
     /// </summary>
     /// <returns>A JSON object with the custom model config values.</returns>
+    /// <summary>
+    /// The Alexa devices seen since the server started (most recent first), with whether
+    /// each one is currently cast to the Sonos speaker. Backs the device picker next to
+    /// the Sonos fields on the config page.
+    /// </summary>
+    /// <returns>The device list.</returns>
+    [HttpGet("recent-devices")]
+    [Authorize(Policy = "RequiresElevation")]
+    public ActionResult GetRecentDevices()
+    {
+        PluginConfiguration config = Plugin.Instance!.Configuration;
+        return new JsonResult(Alexa.Playback.RecentAlexaDevices.Snapshot().Select(d => new
+        {
+            deviceId = d.DeviceId,
+            firstSeenUtc = d.FirstSeenUtc,
+            lastSeenUtc = d.LastSeenUtc,
+            lastRequest = d.LastRequest,
+            hasDisplay = d.HasDisplay,
+            splitEndpointLearned = d.SplitEndpointLearned,
+            sonosCast = Alexa.Playback.SonosCastRouting.ShouldCast(config, d.DeviceId),
+        }).ToList());
+    }
+
     [HttpGet("custom-model/status")]
     [Authorize(Policy = "RequiresElevation")]
     public ActionResult GetCustomModelStatus()
@@ -1061,19 +1093,16 @@ public class ConfigurationController : ControllerBase
 
     /// <summary>
     /// Validates the invocation name. An empty/whitespace value is valid — it means
-    /// "use locale defaults" (it-IT → "mia collezione", other locales → "jellyfin player";
-    /// the effective name deployed to Amazon is always a valid 2+ word default). A
-    /// non-empty value must still be at least two words (Amazon's requirement).
+    /// "use locale defaults" (it-IT → "mia collezione", other locales → "jellyfin player").
+    /// A non-empty value is accepted as typed: Amazon's "two or more words" rule is a
+    /// CERTIFICATION requirement, not a build one (a one-word name such as "jellyfin"
+    /// builds and works in the development stage, the only stage a self-hosted skill
+    /// ever runs in; live-verified on the maintainer's own skill). Any name Amazon does
+    /// reject surfaces through the SMAPI redeploy error on save, with Amazon's message.
     /// </summary>
     private static bool IsValidInvocationName(string name)
     {
-        string trimmed = (name ?? string.Empty).Trim();
-        if (trimmed.Length == 0)
-        {
-            return true;
-        }
-
-        return trimmed.Contains(' ', StringComparison.Ordinal);
+        return name == null || name.Trim().Length == 0 || name.Trim().Length <= 50;
     }
 
     /// <summary>

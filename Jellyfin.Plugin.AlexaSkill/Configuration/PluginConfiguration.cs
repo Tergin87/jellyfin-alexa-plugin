@@ -427,6 +427,42 @@ public class PluginConfiguration : BasePluginConfiguration
 #pragma warning restore CA2227
 
     /// <summary>
+    /// Gets or sets the Alexa device ids learned as split-endpoint speakers (Sonos Era 100:
+    /// voice requests and AudioPlayer events carry two different device ids). Their play
+    /// responses take the shape of the self-hosted skill that chained tracks on that
+    /// speaker (see SplitEndpointCompatibility). Learned at the first device-alias re-key
+    /// and persisted so the first play after a server restart already uses that shape.
+    /// </summary>
+#pragma warning disable CA2227
+    public Collection<string> SplitEndpointDeviceIds { get; set; } = new();
+#pragma warning restore CA2227
+
+    /// <summary>
+    /// Gets or sets the LAN host (IP address or name) of the Sonos speaker whose native
+    /// queue receives the music instead of the Alexa AudioPlayer. Empty (default) disables
+    /// the cast: playback stays on the AudioPlayer. Proof of concept for the Sonos Era 100,
+    /// where the AudioPlayer ENQUEUE is accepted but never played (albums stop after the
+    /// first track), while the speaker's own queue chains tracks natively and Alexa on the
+    /// speaker already controls that queue by voice (pause, next, previous).
+    /// </summary>
+    public string SonosCastHost { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets extra Alexa device ids (comma separated) whose play requests are cast
+    /// to <see cref="SonosCastHost"/>. The learned <see cref="SplitEndpointDeviceIds"/> are
+    /// always cast when a host is set; this list covers a speaker that was never learned.
+    /// </summary>
+    public string SonosCastDeviceIds { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether "play album X" resumes at the first track
+    /// not yet played (the upstream behavior, default) or always starts at track 1. Off,
+    /// the resume-track scan, the seek-mode tracker override and the deep-resume re-page
+    /// are all skipped: the queue is the whole album from its first track.
+    /// </summary>
+    public bool AlbumResumeEnabled { get; set; } = true;
+
+    /// <summary>
     /// Finds the library binding for an Alexa device id, or null when the device is
     /// not bound. Case-insensitive device id compare (the config UI round-trips the
     /// exact id, but hand-edited config files have drifted case before).

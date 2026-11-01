@@ -12,11 +12,14 @@ using Alexa.NET.Request;
 using Alexa.NET.Request.Type;
 using Alexa.NET.Response;
 using Jellyfin.Plugin.AlexaSkill.Alexa;
+using Jellyfin.Plugin.AlexaSkill.Alexa.Cache;
 using Jellyfin.Plugin.AlexaSkill.Alexa.Handler;
 using Jellyfin.Plugin.AlexaSkill.Alexa.Locale;
 using Jellyfin.Plugin.AlexaSkill.Alexa.Pipeline;
+using Jellyfin.Plugin.AlexaSkill.Alexa.Playback;
 using Jellyfin.Plugin.AlexaSkill.Alexa.Util;
 using Jellyfin.Plugin.AlexaSkill.Alexa.Diagnostics;
+using Jellyfin.Plugin.AlexaSkill.Configuration;
 using Jellyfin.Plugin.AlexaSkill.Controller.Handler;
 using Jellyfin.Plugin.AlexaSkill.Diagnostics;
 using Jellyfin.Plugin.AlexaSkill.Entities;
@@ -49,6 +52,11 @@ public class AlexaSkillController : ControllerBase
     private readonly RequestCounters _counters;
     private readonly RequestPipeline _pipeline;
     private readonly IEnumerable<BaseHandler> _handlers;
+    private readonly SonosQueueCaster? _sonosCaster;
+    private readonly ILibraryManager? _libraryManager;
+    private readonly DeviceQueueManager? _queueManager;
+    private readonly SonosPlaybackMonitor? _sonosMonitor;
+    private readonly SonosTransportControl? _sonosTransport;
 
     private readonly CsrfTokenHandler _csrfTokenHandler;
 
@@ -61,20 +69,35 @@ public class AlexaSkillController : ControllerBase
     /// <param name="counters">Request counters for metrics.</param>
     /// <param name="pipeline">The request pipeline for interceptor-based request processing.</param>
     /// <param name="handlers">The registered intent/event handlers.</param>
+    /// <param name="sonosCaster">The Sonos native-queue caster (proof of concept); null in tests.</param>
+    /// <param name="libraryManager">The library manager, used to describe cast tracks; null in tests.</param>
+    /// <param name="queueManager">The device queue manager, the play order of a cast; null in tests.</param>
+    /// <param name="sonosMonitor">The Sonos playback monitor (reports a cast's playback to Jellyfin); null in tests.</param>
+    /// <param name="sonosTransport">The Sonos transport control (transport and what's-playing intents while the speaker plays); null in tests.</param>
     public AlexaSkillController(
         IUserManager userManager,
         ISessionManager sessionManager,
         ILoggerFactory loggerFactory,
         RequestCounters counters,
         RequestPipeline pipeline,
-        IEnumerable<BaseHandler> handlers)
+        IEnumerable<BaseHandler> handlers,
+        SonosQueueCaster? sonosCaster = null,
+        ILibraryManager? libraryManager = null,
+        DeviceQueueManager? queueManager = null,
+        SonosPlaybackMonitor? sonosMonitor = null,
+        SonosTransportControl? sonosTransport = null)
     {
+        _sonosMonitor = sonosMonitor;
+        _sonosTransport = sonosTransport;
         _userManager = userManager;
         _sessionManager = sessionManager;
         _logger = loggerFactory.CreateLogger<AlexaSkillController>();
         _counters = counters;
         _pipeline = pipeline;
         _handlers = handlers;
+        _sonosCaster = sonosCaster;
+        _libraryManager = libraryManager;
+        _queueManager = queueManager;
 
         _csrfTokenHandler = Plugin.Instance!.CsrfTokenHandler;
     }
@@ -330,8 +353,32 @@ public class AlexaSkillController : ControllerBase
             }
 
             string requestId = req.Request?.RequestId ?? Guid.NewGuid().ToString("N")[..8];
+
+            // Split-endpoint speakers (Sonos Era 100): re-key the request to the device the
+            // playing stream was issued for, so its events reach that device's queue.
+            string? reportedDeviceId = req.Context.System.Device?.DeviceID;
+            string? rawPlayingToken = PlaybackDeviceAliases.GetPlayingToken(req);
+            SplitEndpointCompatibility.NormalizeInboundTokens(req);
+            string? playingToken = PlaybackDeviceAliases.GetPlayingToken(req);
+            string? ownerDeviceId = PlaybackDeviceAliases.Shared.ResolveOwner(reportedDeviceId, playingToken);
+            bool splitEndpointLearned = false;
+            if (ownerDeviceId != null)
+            {
+                req.Context.System.Device!.DeviceID = ownerDeviceId;
+                splitEndpointLearned = SplitEndpointCompatibility.Remember(Plugin.Instance!.Configuration.SplitEndpointDeviceIds, ownerDeviceId);
+            }
+
             string deviceId = req.Context.System.Device?.DeviceID ?? "unknown";
             string requestType = req.Request?.Type ?? "unknown";
+
+            // The config page lists the devices seen here so the Sonos speaker can be
+            // picked by a click instead of its id being copied from the log.
+            RecentAlexaDevices.Record(
+                req.Context.System.Device?.DeviceID,
+                req.Request is IntentRequest seenIntent ? seenIntent.Intent?.Name ?? requestType : requestType,
+                req.Context.System.Device?.SupportedInterfaces != null
+                    && (req.Context.System.Device.SupportedInterfaces.ContainsKey("Display") || req.Context.System.Device.SupportedInterfaces.ContainsKey("Alexa.Presentation.APL")),
+                ownerDeviceId != null);
 
             _counters.IncrementRequests();
             _counters.IncrementType(requestType);
@@ -346,6 +393,32 @@ public class AlexaSkillController : ControllerBase
             {
                 _logger.LogInformation("Processing Alexa request of type: {RequestType}", requestType);
                 _logger.LogDebug("Request body: {RequestBody}", RequestLogRedactor.Redact(body));
+
+                if (ownerDeviceId != null)
+                {
+                    _logger.LogInformation(
+                        "Device alias: request from device {ReportedDeviceId} re-keyed to device {OwnerDeviceId}, which the playing stream was issued for",
+                        reportedDeviceId, ownerDeviceId);
+
+                    if (splitEndpointLearned)
+                    {
+                        _logger.LogInformation("Device alias: device {OwnerDeviceId} learned as a split-endpoint speaker", ownerDeviceId);
+                        try
+                        {
+                            Plugin.Instance!.Configuration.PersistUnderLedgerLock();
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Could not persist the learned split-endpoint device; it stays active until restart");
+                        }
+                    }
+                }
+                else if (req.Request is AudioPlayerRequest)
+                {
+                    _logger.LogInformation(
+                        "Device alias: no re-key for device {ReportedDeviceId}, token {Token} issued for [{Issuers}]",
+                        reportedDeviceId, playingToken, string.Join(", ", PlaybackDeviceAliases.Shared.IssuersOf(playingToken)));
+                }
 
                 Entities.User? user = Plugin.Instance!.Configuration.GetUserById(userId);
 
@@ -420,7 +493,44 @@ public class AlexaSkillController : ControllerBase
                     _logger.LogDebug("Routing to FindSongIntentHandler due to active FindSong session (NLU intent was {Intent})", intentName);
                 }
 
+                // Sonos cast: the device queue before the handler runs, so a queue intent's
+                // additions can be diffed out and mirrored into the speaker's queue.
+                bool sonosDevice = SonosCastRouting.ShouldCast(Plugin.Instance!.Configuration, deviceId);
+
+                // Sonos transport: while the speaker plays our music, pause/resume/next/
+                // previous/stop/start-over/shuffle/repeat and "what's playing" addressed to
+                // the skill drive or ask the speaker itself; the regular handlers would see
+                // Alexa's idle context and answer "nothing is playing".
+                if (sonosDevice && await TrySonosTransportAsync(req.Request, user, cts.Token).ConfigureAwait(false) is { } transportResponse)
+                {
+                    return SkillResponseContent(transportResponse);
+                }
+                List<string>? queueBefore = sonosDevice ? _queueManager?.GetQueue(deviceId)?.ItemIds.ToList() : null;
+
                 SkillResponse skillResponse = await _pipeline.ExecuteAsync(selectedHandler, req.Request, req.Context, req.Session, cts.Token).ConfigureAwait(false);
+                string? responseDeviceId = req.Context.System?.Device?.DeviceID;
+
+                // Sonos native-queue cast: a fresh launch for the configured Sonos speaker
+                // fills the speaker's own queue over the LAN and answers with a spoken
+                // confirmation instead of AudioPlayer.Play; a queue intent while the speaker
+                // plays our music adds to that queue instead. On any failure the original
+                // AudioPlayer response goes out unchanged (the first track still plays).
+                if (sonosDevice && responseDeviceId != null)
+                {
+                    if (await TryEnqueueOnSonosAsync(skillResponse, req.Request, responseDeviceId, user, queueBefore, cts.Token).ConfigureAwait(false)
+                        || await TryCastToSonosAsync(skillResponse, req.Request, responseDeviceId, user, cts.Token).ConfigureAwait(false))
+                    {
+                        return SkillResponseContent(skillResponse);
+                    }
+                }
+
+                PlaybackDeviceAliases.Shared.RecordIssuedTokens(responseDeviceId, skillResponse);
+                if (SplitEndpointCompatibility.IsKnown(Plugin.Instance!.Configuration.SplitEndpointDeviceIds, responseDeviceId)
+                    && SplitEndpointCompatibility.Apply(skillResponse, user.Id, rawPlayingToken))
+                {
+                    _logger.LogInformation("Split-endpoint compatibility: play response rewritten to the self-hosted skill shape (universal URL, N-format token, no shouldEndSession)");
+                }
+
                 return SkillResponseContent(skillResponse);
             }
         }
@@ -450,6 +560,266 @@ public class AlexaSkillController : ControllerBase
             Content = json,
             ContentType = "application/json"
         };
+    }
+
+    /// <summary>
+    /// Sonos native-queue cast (proof of concept): when the handler's response is a fresh
+    /// AudioPlayer launch, pushes the device queue (launch item first) into the configured
+    /// Sonos speaker's own queue and rewrites the response into a spoken confirmation.
+    /// </summary>
+    /// <param name="skillResponse">The handler's response (rewritten on success).</param>
+    /// <param name="request">The Alexa request (for the locale).</param>
+    /// <param name="deviceId">The request's device id (the queue key).</param>
+    /// <param name="user">The resolved plugin user (stream URLs carry its token).</param>
+    /// <param name="cancellationToken">The request budget.</param>
+    /// <returns>True when the speaker took the queue and the response was rewritten.</returns>
+    private async Task<bool> TryCastToSonosAsync(SkillResponse skillResponse, Request request, string deviceId, Entities.User user, CancellationToken cancellationToken)
+    {
+        if (_sonosCaster == null || _libraryManager == null)
+        {
+            return false;
+        }
+
+        var launch = SonosCastRouting.FindLaunch(skillResponse);
+        if (launch == null || !StreamTokenCodec.TryGetItemId(launch.AudioItem.Stream.Token, out Guid launchItemId))
+        {
+            return false;
+        }
+
+        PluginConfiguration config = Plugin.Instance!.Configuration;
+        if (string.IsNullOrWhiteSpace(config.ServerAddress) || string.IsNullOrWhiteSpace(user.JellyfinToken))
+        {
+            return false;
+        }
+
+        var serverRoot = new Uri(config.ServerAddress);
+        var tracks = new List<SonosTrack>();
+        string? albumName = null;
+        foreach (string id in SonosCastRouting.PlayOrder(_queueManager?.GetQueue(deviceId), launchItemId.ToString()))
+        {
+            if (!Guid.TryParse(id, out Guid itemGuid) || _libraryManager.GetItemById(itemGuid) is not MediaBrowser.Controller.Entities.BaseItem item)
+            {
+                continue;
+            }
+
+            albumName ??= (item as MediaBrowser.Controller.Entities.Audio.Audio)?.Album;
+            tracks.Add(ToSonosTrack(item, serverRoot, user.JellyfinToken!));
+        }
+
+        if (tracks.Count == 0)
+        {
+            _logger.LogWarning("Sonos cast: no library item behind launch token {Token}; AudioPlayer response kept", launch.AudioItem.Stream.Token);
+            return false;
+        }
+
+        // The progressive queue stores only its first page (InitialFetchSize) at launch and
+        // remembers the rest as a continuation for PlaybackNearlyFinished, an event a cast
+        // never receives: the caster drains it in the background instead.
+        QueueContinuation? continuation = QueueContinuationStore.Get(user.Id, deviceId);
+        Func<CancellationToken, Task<IReadOnlyList<SonosTrack>>>? moreTracks = null;
+        if (continuation != null)
+        {
+            moreTracks = ct => Task.Run(
+                () =>
+                {
+                    IReadOnlyList<MediaBrowser.Controller.Entities.BaseItem> batch = QueueContinuationFetcher.FetchNextBatch(continuation, _libraryManager, _userManager, _logger, user);
+                    if (batch.Count == 0)
+                    {
+                        QueueContinuationStore.Remove(user.Id, deviceId);
+                    }
+
+                    return (IReadOnlyList<SonosTrack>)batch.Select(i => ToSonosTrack(i, serverRoot, user.JellyfinToken!)).ToList();
+                },
+                ct);
+        }
+
+        _logger.LogInformation(
+            "Sonos cast: {Count} track(s) for device {DeviceId} -> {Host}{More}",
+            tracks.Count, deviceId, config.SonosCastHost, continuation != null ? $" (+ {continuation.SourceType} continuation from index {continuation.StartIndex})" : string.Empty);
+        if (!await _sonosCaster.CastAsync(config.SonosCastHost, tracks, cancellationToken, moreTracks).ConfigureAwait(false))
+        {
+            return false;
+        }
+
+        string spoken = tracks.Count > 1 && !string.IsNullOrWhiteSpace(albumName) ? albumName : tracks[0].Title;
+        SonosCastRouting.ToCastConfirmation(skillResponse, ResponseStrings.Get("SonosCastStarted", BaseHandler.GetLocalePublic(request), spoken));
+
+        await StartSonosMonitorAsync(config.SonosCastHost, deviceId, user).ConfigureAwait(false);
+        return true;
+    }
+
+    /// <summary>
+    /// Sonos queue intents ("add to queue", "play next") while the speaker plays our music:
+    /// the items the handler just added to the device queue are mirrored into the speaker's
+    /// queue (end, or right after the current track). When the handler answered with a launch
+    /// because Alexa's context reports nothing playing (the speaker, not Alexa, is playing),
+    /// the response becomes the plain "added" confirmation so the Sonos queue is not replaced.
+    /// </summary>
+    /// <returns>True when the request was a queue intent handled on the speaker.</returns>
+    private async Task<bool> TryEnqueueOnSonosAsync(SkillResponse skillResponse, Request request, string deviceId, Entities.User user, List<string>? queueBefore, CancellationToken cancellationToken)
+    {
+        if (_sonosCaster == null || _sonosMonitor == null || _libraryManager == null
+            || request is not IntentRequest intentRequest
+            || !SonosCastRouting.IsQueueIntent(intentRequest.Intent?.Name, out bool asNext))
+        {
+            return false;
+        }
+
+        PluginConfiguration config = Plugin.Instance!.Configuration;
+        if (!_sonosMonitor.IsFollowing(config.SonosCastHost))
+        {
+            // Nothing of ours plays on the speaker: a launch (if any) goes through the cast.
+            return false;
+        }
+
+        IReadOnlyList<string> added = SonosCastRouting.NewItemIds(queueBefore, _queueManager?.GetQueue(deviceId)?.ItemIds);
+        if (added.Count == 0 || string.IsNullOrWhiteSpace(config.ServerAddress) || string.IsNullOrWhiteSpace(user.JellyfinToken))
+        {
+            return false;
+        }
+
+        var serverRoot = new Uri(config.ServerAddress);
+        var tracks = new List<SonosTrack>();
+        foreach (string id in added)
+        {
+            if (Guid.TryParse(id, out Guid itemGuid) && _libraryManager.GetItemById(itemGuid) is MediaBrowser.Controller.Entities.BaseItem item)
+            {
+                tracks.Add(ToSonosTrack(item, serverRoot, user.JellyfinToken!));
+            }
+        }
+
+        if (tracks.Count == 0)
+        {
+            return false;
+        }
+
+        _logger.LogInformation("Sonos cast: {Intent} adds {Count} track(s) to the queue on {Host} (asNext={AsNext})", intentRequest.Intent!.Name, tracks.Count, config.SonosCastHost, asNext);
+        if (!await _sonosCaster.EnqueueAsync(config.SonosCastHost, tracks, asNext, cancellationToken, _sonosMonitor.LastKnownTrackNumber(config.SonosCastHost)).ConfigureAwait(false))
+        {
+            return false;
+        }
+
+        if (SonosCastRouting.FindLaunch(skillResponse) != null)
+        {
+            string locale = BaseHandler.GetLocalePublic(request);
+            SonosCastRouting.ToCastConfirmation(skillResponse, ResponseStrings.Get(asNext ? "PlayNextConfirmed" : "AddedToQueue", locale, tracks[0].Title));
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Sonos transport intents while the speaker plays our music (the monitor follows it):
+    /// the operation runs on the speaker and the answer is spoken here, bypassing the
+    /// regular handler. A "what's playing" follow-up with a specific info slot (album,
+    /// year, ...) stays with the regular handler, whose session now-playing item the
+    /// monitor keeps current.
+    /// </summary>
+    /// <returns>The response, or null to continue with the regular pipeline.</returns>
+    private async Task<SkillResponse?> TrySonosTransportAsync(Request request, Entities.User user, CancellationToken cancellationToken)
+    {
+        if (_sonosTransport == null || _sonosMonitor == null || _libraryManager == null)
+        {
+            return null;
+        }
+
+        SonosTransportControl.Operation operation;
+        IntentRequest? intentRequest = request as IntentRequest;
+        if (request is LaunchRequest)
+        {
+            // A bare launch ("Alexa, open Jellyfin", or an utterance Alexa could not map
+            // to an intent, device-observed with "ask Jellyfin to pause") while the speaker
+            // plays: the regular launch handler would re-launch the last item and REPLACE
+            // the speaker's queue. Saying what's playing is the harmless answer.
+            operation = SonosTransportControl.Operation.WhatsPlaying;
+        }
+        else if (intentRequest == null || !SonosTransportControl.TryMapIntent(intentRequest.Intent?.Name, out operation))
+        {
+            return null;
+        }
+
+        if (operation == SonosTransportControl.Operation.WhatsPlaying
+            && intentRequest?.Intent?.Slots != null
+            && intentRequest.Intent.Slots.TryGetValue("media_info_type", out Slot? infoSlot)
+            && !string.IsNullOrWhiteSpace(infoSlot.Value))
+        {
+            return null;
+        }
+
+        string host = Plugin.Instance!.Configuration.SonosCastHost;
+        if (!_sonosMonitor.IsFollowing(host))
+        {
+            return null;
+        }
+
+        SkillResponse? response = await _sonosTransport.HandleAsync(
+            host,
+            operation,
+            BaseHandler.GetLocalePublic(request),
+            itemId => _libraryManager.GetItemById(itemId) is MediaBrowser.Controller.Entities.BaseItem item
+                ? (item.Name, (item as MediaBrowser.Controller.Entities.Audio.Audio)?.AlbumArtists.FirstOrDefault() ?? (item as MediaBrowser.Controller.Entities.Audio.Audio)?.Artists.FirstOrDefault(), (item as MediaBrowser.Controller.Entities.Audio.Audio)?.Album)
+                : null,
+            cancellationToken).ConfigureAwait(false);
+
+        if (response == null)
+        {
+            _logger.LogWarning("Sonos transport: {Operation} refused by {Host}; falling back to the regular handler", operation, host);
+        }
+
+        return response;
+    }
+
+    /// <summary>
+    /// Describes a library item for the Sonos queue: stream URL, title, artist, album,
+    /// art and MIME type, keyed by the item id.
+    /// </summary>
+    private static SonosTrack ToSonosTrack(MediaBrowser.Controller.Entities.BaseItem item, Uri serverRoot, string token)
+    {
+        var audio = item as MediaBrowser.Controller.Entities.Audio.Audio;
+        string itemN = item.Id.ToString("N");
+        return new SonosTrack(
+            Url: new Uri(serverRoot, $"Audio/{itemN}/stream?static=true&api_key={token}").ToString(),
+            Title: item.Name,
+            Artist: audio?.AlbumArtists.FirstOrDefault() ?? audio?.Artists.FirstOrDefault(),
+            Album: audio?.Album,
+            ArtUrl: item.HasImage(MediaBrowser.Model.Entities.ImageType.Primary, 0) ? new Uri(serverRoot, $"Items/{itemN}/Images/Primary?api_key={token}").ToString() : null,
+            MimeType: SonosQueueCaster.MimeTypeForContainer(item.Container),
+            Id: itemN);
+    }
+
+    /// <summary>
+    /// Hands the cast to the playback monitor so the speaker's playback is reported to
+    /// Jellyfin. The Jellyfin session is the one the handler pipeline just used for this
+    /// device (cached), with a direct lookup as fallback; without a session the cast still
+    /// plays, only the reporting is skipped.
+    /// </summary>
+    private async Task StartSonosMonitorAsync(string host, string deviceId, Entities.User user)
+    {
+        if (_sonosMonitor == null)
+        {
+            return;
+        }
+
+        SessionInfo? session = null;
+        try
+        {
+            if (!SessionReferenceCache.TryGet(user.JellyfinToken, deviceId, out session) || session == null)
+            {
+                session = await _sessionManager.GetSessionByAuthenticationToken(user.JellyfinToken, deviceId, Plugin.Instance!.Configuration.ServerAddress).ConfigureAwait(false);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Sonos cast: Jellyfin session lookup failed for device {DeviceId}; playback will not be reported", deviceId);
+        }
+
+        if (session == null)
+        {
+            _logger.LogWarning("Sonos cast: no Jellyfin session for device {DeviceId}; playback will not be reported", deviceId);
+            return;
+        }
+
+        _sonosMonitor.Start(host, session);
     }
 
     /// <summary>

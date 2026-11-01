@@ -240,12 +240,34 @@ public class UserSkillApiTests : PluginTestBase, IDisposable
     }
 
     [Fact]
+    public void CreateNewUserSkill_OneWordInvocationName_Accepted()
+    {
+        // Amazon's "two or more words" rule is a certification requirement; a one-word
+        // name builds and works in the development stage, the only stage a self-hosted
+        // skill runs in (live-verified with "jellyfin").
+        var jellyfinUserId = Guid.NewGuid();
+        SetupJellyfinUser("alice", jellyfinUserId);
+
+        var json = JsonConvert.SerializeObject(new
+        {
+            Username = "alice",
+            InvocationName = "jellyfin"
+        });
+
+        var result = _controller.CreateNewUserSkill(json);
+
+        var jsonResult = Assert.IsType<JsonResult>(result);
+        Assert.NotEqual(400, jsonResult.StatusCode);
+        Assert.Equal("jellyfin", Assert.Single(_config.Users).UserSkill!.InvocationName);
+    }
+
+    [Fact]
     public void CreateNewUserSkill_InvalidInvocationName_Returns400()
     {
         var json = JsonConvert.SerializeObject(new
         {
             Username = "alice",
-            InvocationName = "oneword"
+            InvocationName = "this invocation name is far too long to be accepted here"
         });
 
         var result = _controller.CreateNewUserSkill(json);
@@ -494,7 +516,7 @@ public class UserSkillApiTests : PluginTestBase, IDisposable
 
         var json = JsonConvert.SerializeObject(new
         {
-            InvocationName = "oneword"
+            InvocationName = "this invocation name is far too long to be accepted here"
         });
 
         var result = await _controller.UpdateUserSkill(id.ToString(), json);
@@ -1047,7 +1069,7 @@ public class UserSkillApiTests : PluginTestBase, IDisposable
         _config.Users[0].UserSkill!.SkillId = "amzn1.ask.skill.test";
         _config.Users[0].SmapiDeviceToken = CreateTestDeviceToken();
 
-        var json = JsonConvert.SerializeObject(new { InvocationName = "oneword" });
+        var json = JsonConvert.SerializeObject(new { InvocationName = "this invocation name is far too long to be accepted here" });
 
         var result = await _controller.UpdateUserSkill(id.ToString(), json);
 

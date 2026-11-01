@@ -460,8 +460,9 @@ public class PlaybackNearlyFinishedPostPlayTests : PluginTestBase, IDisposable
         Assert.Equal(2, session.NowPlayingQueue.Count);
         Assert.Equal(nextId, session.NowPlayingQueue[1].Id);
 
-        // JF-299 event-response shape: AudioPlayer.Play only, session-ending.
-        Assert.True(response.Response.ShouldEndSession);
+        // Event-response shape: AudioPlayer.Play only, shouldEndSession omitted (never
+        // false, JF-299; not true either: a Sonos Era 100 never plays a true-carrying enqueue).
+        Assert.Null(response.Response.ShouldEndSession);
         Assert.All(response.Response.Directives!, d => Assert.IsType<AudioPlayerPlayDirective>(d));
     }
 

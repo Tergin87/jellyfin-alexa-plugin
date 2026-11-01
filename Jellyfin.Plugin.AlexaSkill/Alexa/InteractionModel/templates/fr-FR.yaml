@@ -110,14 +110,38 @@ intents:
       - mélange la file d'attente
       - mets en lecture aléatoire
       - lecture aléatoire
+      # Sonos natural-wording pass (2026-11-01): everyday phrasings plus the
+      # De-infinitive wrapper twins for the "demande à Jellyfin de ..." form.
+      - mets le mode aléatoire
+      - active le mode aléatoire
+      - mélange les chansons
+      - de mélanger la file d'attente
+      - d'activer la lecture aléatoire
   - name: ShuffleAllOffIntent
     samples:
       - désactive la lecture aléatoire
       - arrête la lecture aléatoire
+      - désactive le mode aléatoire
+      - arrête le mode aléatoire
+      - enlève la lecture aléatoire
+      - remets la lecture dans l'ordre
+      - de désactiver la lecture aléatoire
+      - d'arrêter la lecture aléatoire
   - name: LoopAllOffIntent
     samples:
       - Désactive la boucle
       - Désactive la répétition
+      # Sonos natural-wording pass (2026-11-01): "arrête" is the everyday verb
+      # (device-tested: no repeat-off phrasing was reachable by voice), plus the
+      # De-infinitive wrapper twins.
+      - Arrête la répétition
+      - Arrête la boucle
+      - Enlève la répétition
+      - Ne répète plus
+      - Arrête de répéter
+      - D'arrêter la répétition
+      - D'arrêter la boucle
+      - De désactiver la répétition
   - name: LoopAllOnIntent
     samples:
       # JF-902: queue-scoped wording ONLY (JF-901 made bare loop-activation
@@ -486,6 +510,17 @@ intents:
       - Quelle {media_info_type} est-ce
       - Qu'est-ce qui joue
       - Qu'est-ce qui est en cours
+      # Sonos natural-wording pass (2026-11-01): spoken-French variants.
+      - Qu'est-ce qu'on écoute
+      - C'est quoi cette chanson
+      - C'est quoi ce titre
+      - C'est quoi cette musique
+      - C'est quoi qui joue
+      - Quel est ce morceau
+      - Quel est ce titre
+      - Qui est-ce qui chante
+      - Dis-moi ce qui joue
+      - Qu'est-ce que tu joues
       - Quelle est cette chanson
       - Qui chante
       - Qui chante cette chanson
@@ -717,6 +752,16 @@ intents:
       - Mets {song} de {musician} dans la file d'attente
       - Ajoute {song} à ma liste
       - Ajoute {song} de {musician} à ma liste
+      # Sonos natural-wording pass (2026-11-01): "à la file" / "à la suite" and
+      # the D'-infinitive wrapper twins.
+      - Ajoute {song} à la file
+      - Ajoute {song} de {musician} à la file
+      - Ajoute {song} à la suite
+      - Ajoute {song} de {musician} à la suite
+      - Rajoute {song} à la file d'attente
+      - Mets {song} en fin de file d'attente
+      - D'ajouter {song} à la file d'attente
+      - D'ajouter {song} de {musician} à la file d'attente
   - name: PlayNextIntent
     slots:
       - name: song
@@ -730,6 +775,18 @@ intents:
       - Lis {song} de {musician} après
       - Je veux entendre {song} ensuite
       - Passe {song} ensuite
+      # Sonos natural-wording pass (2026-11-01): "joue"/"mets ... ensuite",
+      # "enchaîne avec", and the De-infinitive wrapper twins.
+      - Joue {song} ensuite
+      - Joue {song} de {musician} ensuite
+      - Mets {song} ensuite
+      - Mets {song} de {musician} ensuite
+      - Joue {song} juste après
+      - Enchaîne avec {song}
+      - Enchaîne avec {song} de {musician}
+      - De jouer {song} ensuite
+      - De jouer {song} de {musician} ensuite
+      - De mettre {song} ensuite
   - name: ClearQueueIntent
     slots: []
     samples:
@@ -859,6 +916,17 @@ intents:
       # JF-902: moved from LoopAllOnIntent (move rationale on that block).
       - Active la boucle
       - Active la répétition
+      # Sonos natural-wording pass (2026-11-01): "le titre" (device-tested:
+      # "répète le titre" routed to BrowseLibraryIntent without a row here),
+      # plus the De-infinitive wrapper twins.
+      - Répète ce titre
+      - Répète le titre
+      - Répète la chanson
+      - Mets ce titre en boucle
+      - Boucle sur ce titre
+      - De répéter ce titre
+      - De répéter cette chanson
+      - De répéter ce morceau
   - name: ShowMoreIntent
     samples:
       - montre plus
