@@ -82,7 +82,11 @@ public static class SpokenNumbers
             return text ?? string.Empty;
         }
 
-        Dictionary<string, int> reverse = ReverseFor(IsSupported(language) ? language! : "en");
+        // Every supported language at once: the French ASR wrote U2 as "u. two"
+        // (device log, 2026-11-01), an English number word inside a French request.
+        // No number word means different values in two of the three languages, so
+        // the union is safe. The language only chooses the spelled form (Spell).
+        Dictionary<string, int> reverse = ReverseFor("*");
         string[] tokens = Separators.Split(text.Trim());
         var output = new List<string>(tokens.Length);
         int i = 0;
@@ -198,6 +202,20 @@ public static class SpokenNumbers
             }
 
             var reverse = new Dictionary<string, int>(StringComparer.Ordinal);
+            if (language == "*")
+            {
+                foreach (string each in new[] { "fr", "en", "it" })
+                {
+                    foreach (KeyValuePair<string, int> pair in ReverseFor(each))
+                    {
+                        reverse.TryAdd(pair.Key, pair.Value);
+                    }
+                }
+
+                ReverseByLanguage[language] = reverse;
+                return reverse;
+            }
+
             for (int n = 0; n <= MaxNumber; n++)
             {
                 reverse.TryAdd(Fold(Spell(n, language)), n);

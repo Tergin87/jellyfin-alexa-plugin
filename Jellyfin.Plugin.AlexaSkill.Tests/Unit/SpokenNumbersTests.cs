@@ -49,6 +49,10 @@ public class SpokenNumbersTests
     [InlineData("m ottanta tre", "it-IT", "m 83")]
     [InlineData("pink floyd", "fr-FR", "pink floyd")]
     [InlineData("the beatles", "en-US", "the beatles")]
+    // The French ASR mixes English number words in ("u. two" for U2, device log).
+    [InlineData("u two", "fr-FR", "u 2")]
+    [InlineData("m eighty three", "fr-FR", "m 83")]
+    [InlineData("u deux", "en-US", "u 2")]
     public void ToDigits_ReplacesNumberWords(string spoken, string locale, string expected)
     {
         Assert.Equal(expected, SpokenNumbers.ToDigits(spoken, LocalePrefix.Of(locale)));
@@ -60,6 +64,7 @@ public class SpokenNumbersTests
         Assert.Equal(new[] { "u 2", "u2" }, SpokenNumbers.QueryVariants("u deux", "fr-FR"));
         // The ASR's rendering of a spelled letter, with its period (device log, M83).
         Assert.Equal(new[] { "m 83", "m83" }, SpokenNumbers.QueryVariants("m. quatre vingt trois", "fr-FR"));
+        Assert.Equal(new[] { "u 2", "u2" }, SpokenNumbers.QueryVariants("u. two", "fr-FR"));
         Assert.Equal(new[] { "m 83", "m83" }, SpokenNumbers.QueryVariants("m quatre vingt trois", "fr-FR"));
         Assert.Equal(new[] { "maroon 5" }, SpokenNumbers.QueryVariants("maroon five", "en-US"));
         Assert.Empty(SpokenNumbers.QueryVariants("pink floyd", "fr-FR"));
